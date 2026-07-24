@@ -164,14 +164,25 @@ class CommunityUrbanChecklistModel {
     return count;
   }
 
-  String get vulnerabilityRating {
+  int get vulnerabilityRating {
     final yesCount = totalYesCount;
     if (yesCount >= 40) {
-      return '5 - Highly Vulnerable';
+      return 5;
     } else if (yesCount >= 20) {
-      return '4 - Moderately Vulnerable';
+      return 4;
     } else {
-      return '3 - Mildly Vulnerable';
+      return 3;
+    }
+  }
+
+  String get vulnerabilityLabel {
+    final rating = vulnerabilityRating;
+    if (rating == 5) {
+      return 'Rating 5: Highly Vulnerable';
+    } else if (rating == 4) {
+      return 'Rating 4: Moderately Vulnerable';
+    } else {
+      return 'Rating 3: Mildly Vulnerable';
     }
   }
 
@@ -233,6 +244,7 @@ class CommunityUrbanChecklistModel {
       'totalScore': calculateTotalScore,
       'totalYesCount': totalYesCount,
       'vulnerabilityRating': vulnerabilityRating,
+      'vulnerabilityLabel': vulnerabilityLabel,
       'signatories': {
         'designatedBumbero': designatedBumbero,
         'workshopTeamLeader': workshopTeamLeader,

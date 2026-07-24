@@ -27,14 +27,29 @@ class HouseToHouseChecklistModel {
   }
 
   // Safety Interpretation based on total YES points
-  String get safetyInterpretation {
+  String get interpretation {
     final points = totalYesPoints;
     if (points >= 24) {
-      return 'Ligtas ang inyong tahanan';
+      return 'Ligtas (Safe)';
     } else if (points >= 12) {
-      return 'Mayroong dapat ipangamba';
+      return 'Maydapat ipangamba (Caution)';
     } else {
-      return 'Labis na mapanganib';
+      return 'Labis na mapanganib (High Hazard)';
+    }
+  }
+
+  // Alias for backwards compatibility
+  String get safetyInterpretation => interpretation;
+
+  // Hex color code matching risk interpretation
+  String get riskColorCode {
+    final points = totalYesPoints;
+    if (points >= 24) {
+      return '#2ECC71';
+    } else if (points >= 12) {
+      return '#F1C40F';
+    } else {
+      return '#E74C3C';
     }
   }
 
@@ -44,7 +59,9 @@ class HouseToHouseChecklistModel {
       'address': address,
       'itemStatuses': itemStatuses.map((k, v) => MapEntry(k.toString(), v)),
       'totalYesPoints': totalYesPoints,
+      'interpretation': interpretation,
       'safetyInterpretation': safetyInterpretation,
+      'riskColorCode': riskColorCode,
       'buildingMaterials': buildingMaterials,
       'suggestions': suggestions,
       'acknowledgedBy': acknowledgedBy,

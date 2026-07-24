@@ -261,11 +261,11 @@ class _CommunityUrbanChecklistWidgetState extends State<CommunityUrbanChecklistW
           'business_name': 'Barangay $barangayText - $sitioText',
           'address': '$sitioText, Barangay $barangayText, Lingayen, Pangasinan',
           'overall_status': 'Completed',
-          'compliance_status': _model.vulnerabilityRating,
-          'recommendation': _model.vulnerabilityRating,
+          'compliance_status': _model.vulnerabilityLabel,
+          'recommendation': _model.vulnerabilityLabel,
           'risk_level': _model.totalYesCount >= 40 ? 'High' : (_model.totalYesCount >= 20 ? 'Medium' : 'Low'),
           'score': _model.calculateTotalScore,
-          'rating': _model.vulnerabilityRating,
+          'rating': _model.vulnerabilityRating.toString(),
           'checklist_data': payloadData,
           'hazard_photo_urls': _photoUrls,
         });
@@ -324,7 +324,7 @@ class _CommunityUrbanChecklistWidgetState extends State<CommunityUrbanChecklistW
   Widget _buildScoreSummaryBanner() {
     final score = _model.calculateTotalScore;
     final yesCount = _model.totalYesCount;
-    final rating = _model.vulnerabilityRating;
+    final ratingLabel = _model.vulnerabilityLabel;
 
     Color badgeColor = successColor;
     if (yesCount >= 40) {
@@ -372,7 +372,7 @@ class _CommunityUrbanChecklistWidgetState extends State<CommunityUrbanChecklistW
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              rating,
+              ratingLabel,
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
             ),
           ),

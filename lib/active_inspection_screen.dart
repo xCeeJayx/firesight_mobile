@@ -23,6 +23,12 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
   bool _isUploadingPhoto = false;
   int _currentStep = 0;
 
+  // IO Consent & NTC variables
+  String _ownerConsentStatus = 'pending'; // 'pending', 'granted', 'refused'
+  String? _refusalReason;
+  bool _ntcIssued = false;
+  DateTime? _ntcExpiryDate;
+
   late BfpChecklistModel _checklistData;
   List<String> _hazardPhotoUrls = [];
   final PageController _pageController = PageController();
@@ -59,11 +65,26 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     super.dispose();
   }
 
+  bool get _hasFailedItems {
+    return _checklistData.meansOfEgress.corridorsClearance == CheckStatus.fail ||
+        _checklistData.fireProtectionSystems.sprinklerInfrastructure == CheckStatus.fail ||
+        _checklistData.meansOfEgress.exitDoorsWidth == CheckStatus.fail ||
+        _checklistData.meansOfEgress.stairwayClearance == CheckStatus.fail ||
+        _checklistData.fireProtectionSystems.fireAlarms == CheckStatus.fail ||
+        _checklistData.fireProtectionSystems.extinguisherPressureLogs == CheckStatus.fail;
+  }
+
+  int get _ntcRemainingDays {
+    final expiry = _ntcExpiryDate ?? DateTime.now().add(const Duration(days: 14));
+    final diff = expiry.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
+
   Future<void> _fetchData() async {
     try {
       final response = await Supabase.instance.client
           .from('inspections')
-          .select('checklist_data, hazard_photo_urls')
+          .select('checklist_data, hazard_photo_urls, owner_consent_status, refusal_reason, ntc_issued, ntc_expiry_date')
           .eq('id', widget.assignmentId)
           .maybeSingle();
 
@@ -76,6 +97,13 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
 
         if (response['hazard_photo_urls'] != null) {
           _hazardPhotoUrls = List<String>.from(response['hazard_photo_urls']);
+        }
+
+        _ownerConsentStatus = response['owner_consent_status']?.toString() ?? 'pending';
+        _refusalReason = response['refusal_reason']?.toString();
+        _ntcIssued = response['ntc_issued'] == true;
+        if (response['ntc_expiry_date'] != null) {
+          _ntcExpiryDate = DateTime.tryParse(response['ntc_expiry_date'].toString());
         }
       } else {
         _checklistData = BfpChecklistModel();
@@ -98,6 +126,89 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     }
   }
 
+  Future<void> _handleGrantConsent() async {
+    setState(() {
+      _ownerConsentStatus = 'granted';
+    });
+    try {
+      await Supabase.instance.client.from('inspections').update({
+        'owner_consent_status': 'granted',
+      }).eq('id', widget.assignmentId);
+      _showToast('Owner consent granted!', isError: false);
+    } catch (e) {
+      debugPrint('Failed to update consent status: $e');
+    }
+  }
+
+  Future<void> _handleRefusal() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Record Owner Refusal'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Owner refused entry for inspection. Enter a mandatory reason to flag for FSES Head escalation.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Enter reason for refusal (e.g. Owner absent, Entry denied, Premises locked)...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context, controller.text.trim());
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            child: const Text('LOG REFUSAL', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (reason != null && reason.isNotEmpty) {
+      setState(() {
+        _ownerConsentStatus = 'refused';
+        _refusalReason = reason;
+        _isSaving = true;
+      });
+
+      try {
+        await Supabase.instance.client.from('inspections').update({
+          'owner_consent_status': 'refused',
+          'overall_status': 'refused',
+          'approval_stage': 'flagged_for_fses_head',
+          'refusal_reason': reason,
+        }).eq('id', widget.assignmentId);
+
+        _showToast('Inspection marked Refused & Flagged for FSES Head', isError: true);
+      } catch (e) {
+        _showToast('Failed to record refusal: $e', isError: true);
+      } finally {
+        if (mounted) {
+          setState(() => _isSaving = false);
+        }
+      }
+    }
+  }
+
   Future<void> _saveChecklistData({bool isCompleting = false}) async {
     setState(() {
       _isSaving = true;
@@ -108,14 +219,30 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     _checklistData.generalInfo.ioTrackingNumber = _ioTrackingController.text;
     _checklistData.generalInfo.contactNumber = _contactNumberController.text;
 
+    final bool nonCompliant = _hasFailedItems;
+    final bool issueNtc = nonCompliant || _ntcIssued;
+
+    if (issueNtc && _ntcExpiryDate == null) {
+      _ntcExpiryDate = DateTime.now().add(const Duration(days: 14));
+      _ntcIssued = true;
+    }
+
     try {
       final updatePayload = <String, dynamic>{
         'checklist_data': _checklistData.toJson(),
         'business_name': _businessNameController.text,
+        'owner_consent_status': _ownerConsentStatus,
+        if (_refusalReason != null) 'refusal_reason': _refusalReason,
+        'ntc_issued': issueNtc,
+        if (_ntcExpiryDate != null) 'ntc_expiry_date': _ntcExpiryDate!.toIso8601String(),
       };
 
-      if (isCompleting) {
+      if (issueNtc) {
+        updatePayload['compliance_status'] = 'Non-Compliant';
+        updatePayload['approval_stage'] = 'flagged_for_fses_head';
+      } else if (isCompleting) {
         updatePayload['overall_status'] = 'Completed';
+        updatePayload['compliance_status'] = 'Compliant';
       }
 
       await Supabase.instance.client
@@ -124,7 +251,7 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
           .eq('id', widget.assignmentId);
 
       if (isCompleting) {
-        _showToast('Inspection Completed & Saved!', isError: false);
+        _showToast(issueNtc ? 'Inspection Completed: NTC Issued (Non-Compliant)' : 'Inspection Completed & Saved!', isError: issueNtc);
         if (mounted) Navigator.of(context).pop();
       } else {
         _showToast('Draft saved successfully!', isError: false);
@@ -242,18 +369,205 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD84315)))
-          : PageView(
-              controller: _pageController,
-              onPageChanged: (idx) => setState(() => _currentStep = idx),
+          : Column(
               children: [
-                _buildStep1EstablishmentInfo(),
-                _buildStep2ExteriorAssessment(),
-                _buildStep3ElectricalAndExits(),
-                _buildStep4SuppressionSystems(),
-                _buildStep5PhotoEvidence(),
+                if (_hasFailedItems || _ntcIssued) _buildNtcCountdownBanner(),
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: (idx) => setState(() => _currentStep = idx),
+                    children: [
+                      _buildStep1EstablishmentInfo(),
+                      _buildStep2ExteriorAssessment(),
+                      _buildStep3ElectricalAndExits(),
+                      _buildStep4SuppressionSystems(),
+                      _buildStep5PhotoEvidence(),
+                    ],
+                  ),
+                ),
               ],
             ),
       bottomNavigationBar: _buildStickyFooter(),
+    );
+  }
+
+  Widget _buildNtcCountdownBanner() {
+    final remainingDays = _ntcRemainingDays;
+    final expiryFormatted = _ntcExpiryDate != null
+        ? '${_ntcExpiryDate!.year}-${_ntcExpiryDate!.month.toString().padLeft(2, '0')}-${_ntcExpiryDate!.day.toString().padLeft(2, '0')}'
+        : '14 Days';
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFEF2F2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFEF4444), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.timer_outlined, color: Color(0xFFDC2626), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '⚠️ NOTICE TO COMPLY (NTC) ISSUED',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF991B1B),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Re-inspection countdown: $remainingDays days remaining (Deadline: $expiryFormatted)',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D), fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOwnerConsentCard() {
+    if (_ownerConsentStatus == 'refused') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF87171)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.block_rounded, color: Color(0xFFDC2626), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'ENTRY REFUSED BY OWNER',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF991B1B), fontSize: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Reason: ${_refusalReason ?? "Owner denied entry."}',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF7F1D1D)),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Status: Flagged for FSES Head Review',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_ownerConsentStatus == 'granted') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF86EFAC)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Owner Consent Granted — Entry Authorized',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: _handleRefusal,
+              child: const Text('Change to Refused', style: TextStyle(fontSize: 11, color: Color(0xFFDC2626))),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCD34D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.assignment_ind_outlined, color: Color(0xFFD97706), size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Owner Entry Consent Checklist',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF92400E), fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Confirm owner consent prior to physical inspection assessment.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF78350F)),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _handleRefusal,
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('REFUSE ENTRY'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFDC2626),
+                    side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _handleGrantConsent,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('GRANT ENTRY'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -273,6 +587,7 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
             style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 16),
+          _buildOwnerConsentCard(),
           _buildTextField('Business Name', _businessNameController, Icons.business),
           const SizedBox(height: 12),
           _buildTextField('Owner / Administrator', _ownersNameController, Icons.person_outline),
