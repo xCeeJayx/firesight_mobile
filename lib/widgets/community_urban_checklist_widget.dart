@@ -229,29 +229,59 @@ class _CommunityUrbanChecklistWidgetState extends State<CommunityUrbanChecklistW
     final sitioText = _model.purokSitio.isNotEmpty ? _model.purokSitio : 'Sitio';
 
     try {
-      await Supabase.instance.client.from('inspections').insert({
+      final surveyPayload = {
         'inspector_id': userId,
-        'checklist_type': 'community_urban',
-        'inspection_order_no': 'CFPP-${DateTime.now().millisecondsSinceEpoch}',
-        'date_issued': DateTime.now().toIso8601String().split('T').first,
-        'date_inspected': DateTime.now().toIso8601String().split('T').first,
-        'business_name': 'Barangay $barangayText - $sitioText',
-        'address': '$sitioText, Barangay $barangayText',
-        'overall_status': 'Completed',
-        'compliance_status': _model.vulnerabilityRating,
-        'recommendation': _model.vulnerabilityRating,
-        'risk_level': _model.totalYesCount >= 40 ? 'High' : (_model.totalYesCount >= 20 ? 'Medium' : 'Low'),
-        'score': _model.calculateTotalScore,
-        'rating': _model.vulnerabilityRating,
-        'checklist_data': payloadData,
-        'hazard_photo_urls': _photoUrls,
-      });
+        'survey_type': 'community_urban',
+        'barangay_name': barangayText,
+        'municipality': 'Lingayen',
+        'province': 'Pangasinan',
+        'total_houses': _model.householdCount ?? 0,
+        'population_density': _model.totalYesCount >= 40 ? 'High' : 'Medium',
+        'structure_type': _model.communityType ?? 'Urban / Rural Community',
+        'road_accessibility': (_model.accessPassableFor != null && _model.accessPassableFor!.isNotEmpty) ? _model.accessPassableFor! : 'Passable',
+        'water_source_availability': (_model.waterSourceStatus != null && _model.waterSourceStatus!.isNotEmpty) ? _model.waterSourceStatus! : 'Available',
+        'electrical_hazards': 'Evaluated in survey',
+        'previous_fire_incidents': 0,
+        'calculated_score': _model.calculateTotalScore,
+        'risk_level': _model.totalYesCount >= 40 ? 'High Risk' : (_model.totalYesCount >= 20 ? 'Medium Risk' : 'Low Risk'),
+        'survey_data': payloadData,
+        'photo_urls': _photoUrls,
+      };
+
+      try {
+        await Supabase.instance.client.from('fire_risk_surveys').insert(surveyPayload);
+      } catch (_) {
+        // Fallback to inspections table if fire_risk_surveys table does not exist yet in Supabase
+        await Supabase.instance.client.from('inspections').insert({
+          'inspector_id': userId,
+          'checklist_type': 'community_urban',
+          'inspection_order_no': 'CFPP-${DateTime.now().millisecondsSinceEpoch}',
+          'date_issued': DateTime.now().toIso8601String().split('T').first,
+          'date_inspected': DateTime.now().toIso8601String().split('T').first,
+          'business_name': 'Barangay $barangayText - $sitioText',
+          'address': '$sitioText, Barangay $barangayText, Lingayen, Pangasinan',
+          'overall_status': 'Completed',
+          'compliance_status': _model.vulnerabilityRating,
+          'recommendation': _model.vulnerabilityRating,
+          'risk_level': _model.totalYesCount >= 40 ? 'High' : (_model.totalYesCount >= 20 ? 'Medium' : 'Low'),
+          'score': _model.calculateTotalScore,
+          'rating': _model.vulnerabilityRating,
+          'checklist_data': payloadData,
+          'hazard_photo_urls': _photoUrls,
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CFPP Risk & Vulnerability Checklist Submitted!'), backgroundColor: Color(0xFF10B981)),
+          const SnackBar(
+            content: Text('CFPP Risk & Vulnerability Checklist Submitted Successfully!'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {

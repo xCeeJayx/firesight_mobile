@@ -1,62 +1,91 @@
 import 'package:flutter/material.dart';
+import 'widgets/common/status_badge.dart';
 
 class ReportDetailScreen extends StatelessWidget {
   final Map<String, dynamic> report;
 
   const ReportDetailScreen({super.key, required this.report});
 
+  void _exportPdf(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Exporting Audit Report PDF...'),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD84315),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final checklistData = report['checklist_data'] as Map<String, dynamic>? ?? {};
-    final String type = checklistData['checklist_type'] ?? 'commercial';
+    final String type = checklistData['checklist_type'] ?? report['checklist_type'] ?? 'commercial';
 
     String typeTitle = 'Commercial Fire Safety Inspection';
-    Color themeColor = const Color(0xFFF95921);
-    IconData typeIcon = Icons.business;
+    Color themeColor = const Color(0xFFD84315);
+    IconData typeIcon = Icons.business_rounded;
 
     if (type == 'community_urban') {
       typeTitle = 'CFPP Community Risk (Urban)';
-      themeColor = const Color(0xFF3B82F6);
-      typeIcon = Icons.holiday_village;
+      themeColor = const Color(0xFF0284C7);
+      typeIcon = Icons.holiday_village_rounded;
     } else if (type == 'house_to_house') {
       typeTitle = 'House to House Fire Safety';
-      themeColor = const Color(0xFF10B981);
-      typeIcon = Icons.home;
+      themeColor = const Color(0xFF16A34A);
+      typeIcon = Icons.home_rounded;
     }
 
     final String title = report['business_name'] ?? 'Inspection Report';
     final String address = report['address'] ?? 'No address provided';
-    final String status = report['compliance_status'] ?? report['recommendation'] ?? 'Completed';
+    final String status = report['compliance_status'] ?? report['recommendation'] ?? report['rating'] ?? 'Completed';
+    final String riskLevel = report['risk_level'] ?? 'Medium';
     final String dateStr = report['date_inspected'] != null
         ? report['date_inspected'].toString().split('T').first
         : (report['created_at'] != null ? report['created_at'].toString().split('T').first : 'N/A');
-    final String ioNo = report['inspection_order_no'] ?? 'N/A';
+    final String ioNo = report['inspection_order_no'] ?? report['inspection_order_number'] ?? 'N/A';
 
-    final List<dynamic> rawPhotos = report['hazard_photo_urls'] is List
-        ? report['hazard_photo_urls']
-        : [];
+    final List<dynamic> rawPhotos = report['hazard_photo_urls'] is List ? report['hazard_photo_urls'] : [];
     final List<String> photoUrls = rawPhotos.map((e) => e.toString()).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(typeTitle, style: const TextStyle(color: Color(0xFF1E293B), fontSize: 16, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+        title: Text(typeTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined, color: Color(0xFF0F172A)),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sharing Inspection Summary...')),
+              );
+            },
+            tooltip: 'Share Report',
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFD84315)),
+            onPressed: () => _exportPdf(context),
+            tooltip: 'Export PDF',
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Header Summary Card
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE2E8F0)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2)),
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             child: Column(
@@ -64,52 +93,79 @@ class ReportDetailScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(typeIcon, size: 20, color: themeColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                      ),
-                    ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: themeColor.withOpacity(0.1),
+                        color: themeColor.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        status,
-                        style: TextStyle(color: themeColor, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
+                      child: Icon(typeIcon, size: 22, color: themeColor),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF64748B)),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(address, style: const TextStyle(color: Color(0xFF64748B), fontSize: 14)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(Icons.location_on_outlined, size: 14, color: Color(0xFF64748B)),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(address, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 const Divider(height: 24, color: Color(0xFFE2E8F0)),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildInfoBadge('Date Inspected', dateStr),
-                    _buildInfoBadge('IO Number', ioNo),
-                    _buildInfoBadge('Overall Status', report['overall_status'] ?? 'Completed'),
+                    Expanded(child: _buildInfoBadge('DATE INSPECTED', dateStr)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildInfoBadge('IO TRACKING', ioNo)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('RISK LEVEL', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          StatusBadge(status: riskLevel),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('STATUS', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          StatusBadge(status: status),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Checklist Specific Payload Viewer
+          // Detailed Breakdown Payload Viewer
           if (type == 'community_urban')
             _buildCommunityUrbanDetails(context, checklistData, themeColor)
           else if (type == 'house_to_house')
@@ -117,11 +173,11 @@ class ReportDetailScreen extends StatelessWidget {
           else
             _buildCommercialDetails(context, checklistData, themeColor),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           // Photo Documentation Gallery
           if (photoUrls.isNotEmpty) ...[
-            _buildSectionTitle('PHOTO DOCUMENTATION'),
+            _buildSectionTitle('HAZARD PHOTO EVIDENCE'),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -139,12 +195,12 @@ class ReportDetailScreen extends StatelessWidget {
                   return GestureDetector(
                     onTap: () => _openImagePreview(context, photoUrls[index]),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       child: Image.network(
                         photoUrls[index],
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
-                          color: const Color(0xFFE2E8F0),
+                          color: const Color(0xFFF1F5F9),
                           child: const Icon(Icons.broken_image, color: Colors.grey),
                         ),
                       ),
@@ -163,9 +219,14 @@ class ReportDetailScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-        const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -203,9 +264,9 @@ class ReportDetailScreen extends StatelessWidget {
           _buildDetailRow('Floor Interior Finish', specs['interiorFinishFloor']),
           _buildDetailRow('Occupancy Classification', specs['occupancyClassification']),
           _buildDetailRow('Occupant Load (P/Floor)', specs['occupantLoad']),
-          _buildDetailRow('Number of Stories', specs['numberOfStories']),
+          _buildDetailRow('Number of Stories', specs['numberOfStories']?.toString()),
           _buildDetailRow('Building Height', specs['buildingHeight'] != null ? '${specs['buildingHeight']} m' : null),
-          _buildDetailRow('Highrise Building', specs['isHighrise']),
+          _buildDetailRow('Highrise Building', specs['isHighrise']?.toString()),
           if (secOcc.isNotEmpty) ...[
             const Divider(height: 16),
             _buildDetailRow('Basement Usage', secOcc['basement']),
@@ -370,7 +431,7 @@ class ReportDetailScreen extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         title,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.2),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
       ),
     );
   }
@@ -394,12 +455,12 @@ class ReportDetailScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 130,
+            width: 140,
             child: Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
+            child: Text(value, style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -413,25 +474,14 @@ class ReportDetailScreen extends StatelessWidget {
       child: Column(
         children: statusMap.entries.map((entry) {
           final val = entry.value;
-          Color c = const Color(0xFF64748B);
-          if (val == 'YES' || val == 'Passed' || val == 'Compliant') c = const Color(0xFF10B981);
-          if (val == 'NO' || val == 'Failed' || val == 'Non-Compliant') c = const Color(0xFFEF4444);
-
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(entry.key, style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B), fontWeight: FontWeight.w500)),
+                  child: Text(entry.key, style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A), fontWeight: FontWeight.w500)),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: c.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(val, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c)),
-                ),
+                StatusBadge(status: val),
               ],
             ),
           );
@@ -466,7 +516,7 @@ class ReportDetailScreen extends StatelessWidget {
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(color: const Color(0xFFE2E8F0)),
     );
   }

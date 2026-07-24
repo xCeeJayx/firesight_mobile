@@ -222,9 +222,15 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('BFP Commercial Fire Safety Checklist Submitted!'), backgroundColor: Color(0xFF10B981)),
+          const SnackBar(
+            content: Text('BFP Commercial Fire Safety Checklist Submitted Successfully!'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {

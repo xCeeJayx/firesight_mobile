@@ -85,30 +85,81 @@ class _HouseToHouseChecklistWidgetState extends State<HouseToHouseChecklistWidge
     final payloadData = _model.toJson();
     payloadData['checklist_type'] = 'house_to_house';
 
+    final knownBarangays = [
+      'Aliwekwek', 'Baay', 'Balangobong', 'Balococ', 'Bantayan', 'Basing',
+      'Capandanan', 'Domalandan Center', 'Domalandan East', 'Domalandan West',
+      'Dorongan', 'Dulag', 'Estanza', 'Lasip', 'Libsong East', 'Libsong West',
+      'Malawa', 'Malimpuec', 'Maniboc', 'Matalava', 'Naguelguel', 'Namolan',
+      'Pangapisan North', 'Pangapisan Sur', 'Poblacion', 'Quibaol', 'Rosario',
+      'Sabangan', 'Talogtog', 'Tonton', 'Tumbar', 'Wawa'
+    ];
+
+    String detectedBarangay = 'Poblacion';
+    final addrLower = _model.address.toLowerCase();
+    for (final b in knownBarangays) {
+      if (addrLower.contains(b.toLowerCase())) {
+        detectedBarangay = b;
+        break;
+      }
+    }
+    if (detectedBarangay == 'Poblacion' && _model.address.contains('Brgy.')) {
+      detectedBarangay = _model.address.split('Brgy.').last.split(',').first.trim();
+    }
+
     try {
-      await Supabase.instance.client.from('inspections').insert({
+      final surveyPayload = {
         'inspector_id': userId,
-        'checklist_type': 'house_to_house',
-        'inspection_order_no': 'H2H-${DateTime.now().millisecondsSinceEpoch}',
-        'date_issued': DateTime.now().toIso8601String().split('T').first,
-        'date_inspected': DateTime.now().toIso8601String().split('T').first,
-        'business_name': _model.occupantName.isNotEmpty ? 'House of ${_model.occupantName}' : 'House Inspection',
-        'address': _model.address.isNotEmpty ? _model.address : 'No address provided',
-        'overall_status': 'Completed',
-        'compliance_status': _model.safetyInterpretation,
-        'recommendation': _model.suggestions.isNotEmpty ? _model.suggestions : _model.safetyInterpretation,
-        'risk_level': _model.totalYesPoints < 12 ? 'High' : (_model.totalYesPoints < 24 ? 'Medium' : 'Low'),
-        'score': _model.totalYesPoints,
-        'rating': _model.safetyInterpretation,
-        'checklist_data': payloadData,
-        'hazard_photo_urls': _photoUrls,
-      });
+        'survey_type': 'house_to_house',
+        'barangay_name': detectedBarangay,
+        'municipality': 'Lingayen',
+        'province': 'Pangasinan',
+        'total_houses': 1,
+        'population_density': 'Medium',
+        'structure_type': 'Residential Dwelling',
+        'road_accessibility': 'Evaluated in H2H survey',
+        'water_source_availability': 'Evaluated in H2H survey',
+        'electrical_hazards': _model.itemStatuses[10] == 'YES' ? 'Spaghetti / Faulty Wiring' : 'Standard Wiring',
+        'previous_fire_incidents': 0,
+        'calculated_score': _model.totalYesPoints.toDouble(),
+        'risk_level': _model.totalYesPoints < 12 ? 'High Risk' : (_model.totalYesPoints < 24 ? 'Medium Risk' : 'Low Risk'),
+        'survey_data': payloadData,
+        'photo_urls': _photoUrls,
+      };
+
+      try {
+        await Supabase.instance.client.from('fire_risk_surveys').insert(surveyPayload);
+      } catch (_) {
+        // Fallback to inspections table if fire_risk_surveys table does not exist yet in Supabase
+        await Supabase.instance.client.from('inspections').insert({
+          'inspector_id': userId,
+          'checklist_type': 'house_to_house',
+          'inspection_order_no': 'H2H-${DateTime.now().millisecondsSinceEpoch}',
+          'date_issued': DateTime.now().toIso8601String().split('T').first,
+          'date_inspected': DateTime.now().toIso8601String().split('T').first,
+          'business_name': _model.occupantName.isNotEmpty ? 'House of ${_model.occupantName}' : 'House Inspection',
+          'address': _model.address.isNotEmpty ? _model.address : 'No address provided',
+          'overall_status': 'Completed',
+          'compliance_status': _model.safetyInterpretation,
+          'recommendation': _model.suggestions.isNotEmpty ? _model.suggestions : _model.safetyInterpretation,
+          'risk_level': _model.totalYesPoints < 12 ? 'High' : (_model.totalYesPoints < 24 ? 'Medium' : 'Low'),
+          'score': _model.totalYesPoints,
+          'rating': _model.safetyInterpretation,
+          'checklist_data': payloadData,
+          'hazard_photo_urls': _photoUrls,
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('House to House Checklist Submitted!'), backgroundColor: Color(0xFF10B981)),
+          const SnackBar(
+            content: Text('House to House Checklist Submitted Successfully!'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {

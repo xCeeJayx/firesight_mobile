@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'models/bfp_checklist_model.dart';
+import 'widgets/common/inspection_choice_tile.dart';
 
 class ActiveInspectionScreen extends StatefulWidget {
   final String assignmentId;
@@ -20,15 +21,26 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
-  
+  int _currentStep = 0;
+
   late BfpChecklistModel _checklistData;
   List<String> _hazardPhotoUrls = [];
+  final PageController _pageController = PageController();
 
-  // Controllers for General Information
+  // Controllers for General Info & Signatures
   final _businessNameController = TextEditingController();
   final _ownersNameController = TextEditingController();
   final _ioTrackingController = TextEditingController();
   final _contactNumberController = TextEditingController();
+  final _inspectorNotesController = TextEditingController();
+
+  final List<String> _stepTitles = [
+    'Establishment Details & Sign-in',
+    'Exterior & Hydrant Assessment',
+    'Electrical & Exit Compliance',
+    'Suppression Systems',
+    'Photo Evidence & Signature',
+  ];
 
   @override
   void initState() {
@@ -38,10 +50,12 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _businessNameController.dispose();
     _ownersNameController.dispose();
     _ioTrackingController.dispose();
     _contactNumberController.dispose();
+    _inspectorNotesController.dispose();
     super.dispose();
   }
 
@@ -67,7 +81,6 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
         _checklistData = BfpChecklistModel();
       }
 
-      // Initialize controllers with fetched data
       _businessNameController.text = _checklistData.generalInfo.businessName ?? '';
       _ownersNameController.text = _checklistData.generalInfo.ownersName ?? '';
       _ioTrackingController.text = _checklistData.generalInfo.ioTrackingNumber ?? '';
@@ -85,24 +98,37 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     }
   }
 
-  Future<void> _saveChecklistData() async {
+  Future<void> _saveChecklistData({bool isCompleting = false}) async {
     setState(() {
       _isSaving = true;
     });
 
-    // Update model with text fields before saving
     _checklistData.generalInfo.businessName = _businessNameController.text;
     _checklistData.generalInfo.ownersName = _ownersNameController.text;
     _checklistData.generalInfo.ioTrackingNumber = _ioTrackingController.text;
     _checklistData.generalInfo.contactNumber = _contactNumberController.text;
 
     try {
+      final updatePayload = <String, dynamic>{
+        'checklist_data': _checklistData.toJson(),
+        'business_name': _businessNameController.text,
+      };
+
+      if (isCompleting) {
+        updatePayload['overall_status'] = 'Completed';
+      }
+
       await Supabase.instance.client
           .from('inspections')
-          .update({'checklist_data': _checklistData.toJson()})
+          .update(updatePayload)
           .eq('id', widget.assignmentId);
 
-      _showToast('Checklist saved successfully!', isError: false);
+      if (isCompleting) {
+        _showToast('Inspection Completed & Saved!', isError: false);
+        if (mounted) Navigator.of(context).pop();
+      } else {
+        _showToast('Draft saved successfully!', isError: false);
+      }
     } catch (e) {
       _showToast('Failed to save checklist: $e', isError: true);
     } finally {
@@ -117,7 +143,6 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
   Future<void> _captureAndUploadPhoto() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
-
     if (pickedFile == null) return;
 
     setState(() {
@@ -128,28 +153,24 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
       final file = File(pickedFile.path);
       final fileName = '${widget.assignmentId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
       
-      // Upload to Supabase Storage bucket named 'hazard-photos'
       await Supabase.instance.client.storage
           .from('hazard-photos')
           .upload(fileName, file);
 
-      // Get the public URL
       final publicUrl = Supabase.instance.client.storage
           .from('hazard-photos')
           .getPublicUrl(fileName);
 
-      // Append to our local state list
       setState(() {
         _hazardPhotoUrls.add(publicUrl);
       });
 
-      // Update the text array column in the inspections table
       await Supabase.instance.client
           .from('inspections')
           .update({'hazard_photo_urls': _hazardPhotoUrls})
           .eq('id', widget.assignmentId);
 
-      _showToast('Photo uploaded successfully!', isError: false);
+      _showToast('Photo uploaded!', isError: false);
     } catch (e) {
       _showToast('Failed to upload photo: $e', isError: true);
     } finally {
@@ -165,160 +186,228 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(isError ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message, style: const TextStyle(color: Colors.white))),
-          ],
-        ),
-        backgroundColor: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+        content: Text(message),
+        backgroundColor: isError ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
+  }
+
+  InspectionChoice _checkStatusToChoice(CheckStatus? status) {
+    if (status == CheckStatus.pass) return InspectionChoice.pass;
+    if (status == CheckStatus.fail) return InspectionChoice.fail;
+    return InspectionChoice.notApplicable;
+  }
+
+  CheckStatus? _choiceToCheckStatus(InspectionChoice? choice) {
+    if (choice == InspectionChoice.pass) return CheckStatus.pass;
+    if (choice == InspectionChoice.fail) return CheckStatus.fail;
+    if (choice == InspectionChoice.notApplicable) return CheckStatus.notApplicable;
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('BFP Inspection Checklist', style: TextStyle(fontSize: 18)),
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Inspection Wizard',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Step ${_currentStep + 1} of ${_stepTitles.length}: ${_stepTitles[_currentStep]}',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_border_rounded, color: Color(0xFFD84315)),
+            onPressed: _isSaving ? null : () => _saveChecklistData(),
+            tooltip: 'Save Draft',
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(4),
+          child: LinearProgressIndicator(
+            value: (_currentStep + 1) / _stepTitles.length,
+            backgroundColor: const Color(0xFFE2E8F0),
+            color: const Color(0xFFD84315),
+          ),
+        ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
-          : ListView(
-              padding: const EdgeInsets.only(bottom: 100), // Padding for FAB
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFD84315)))
+          : PageView(
+              controller: _pageController,
+              onPageChanged: (idx) => setState(() => _currentStep = idx),
               children: [
-                _buildGeneralInformationSection(),
-                _buildMeansOfEgressSection(),
-                _buildFireProtectionSystemsSection(),
-                _buildPhotoDocumentationSection(),
+                _buildStep1EstablishmentInfo(),
+                _buildStep2ExteriorAssessment(),
+                _buildStep3ElectricalAndExits(),
+                _buildStep4SuppressionSystems(),
+                _buildStep5PhotoEvidence(),
               ],
             ),
-      floatingActionButton: _isLoading
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _isSaving ? null : _saveChecklistData,
-              backgroundColor: const Color(0xFFEF4444),
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save, color: Colors.white),
-              label: Text(
-                _isSaving ? 'SAVING...' : 'SAVE CHECKLIST',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
-              ),
-            ),
+      bottomNavigationBar: _buildStickyFooter(),
     );
   }
 
-  Widget _buildGeneralInformationSection() {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        initiallyExpanded: true,
-        iconColor: const Color(0xFF10B981),
-        collapsedIconColor: Colors.white70,
-        title: const Text(
-          'General Information',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
-          _buildTextField(label: 'Business Name', controller: _businessNameController, icon: Icons.business),
-          const SizedBox(height: 16),
-          _buildTextField(label: 'Owners Name', controller: _ownersNameController, icon: Icons.person),
-          const SizedBox(height: 16),
-          _buildTextField(label: 'IO Tracking Number', controller: _ioTrackingController, icon: Icons.assignment),
-          const SizedBox(height: 16),
-          _buildTextField(label: 'Contact Number', controller: _contactNumberController, icon: Icons.phone, isPhone: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMeansOfEgressSection() {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        iconColor: const Color(0xFF10B981),
-        collapsedIconColor: Colors.white70,
-        title: const Text(
-          'Means of Egress',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
-          _buildStatusToggle(
-            title: 'Exit Doors Width (Compliance)',
-            currentValue: _checklistData.meansOfEgress.exitDoorsWidth,
-            onChanged: (val) => setState(() => _checklistData.meansOfEgress.exitDoorsWidth = val),
-          ),
-          _buildStatusToggle(
-            title: 'Corridors Clearance',
-            currentValue: _checklistData.meansOfEgress.corridorsClearance,
-            onChanged: (val) => setState(() => _checklistData.meansOfEgress.corridorsClearance = val),
-          ),
-          _buildStatusToggle(
-            title: 'Stairway Clearance',
-            currentValue: _checklistData.meansOfEgress.stairwayClearance,
-            onChanged: (val) => setState(() => _checklistData.meansOfEgress.stairwayClearance = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFireProtectionSystemsSection() {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        iconColor: const Color(0xFF10B981),
-        collapsedIconColor: Colors.white70,
-        title: const Text(
-          'Fire Protection Systems',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
-          _buildStatusToggle(
-            title: 'Fire Alarms & Detection',
-            currentValue: _checklistData.fireProtectionSystems.fireAlarms,
-            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.fireAlarms = val),
-          ),
-          _buildStatusToggle(
-            title: 'Extinguisher Pressure Logs',
-            currentValue: _checklistData.fireProtectionSystems.extinguisherPressureLogs,
-            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.extinguisherPressureLogs = val),
-          ),
-          _buildStatusToggle(
-            title: 'Sprinkler Infrastructure',
-            currentValue: _checklistData.fireProtectionSystems.sprinklerInfrastructure,
-            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.sprinklerInfrastructure = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhotoDocumentationSection() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+  Widget _buildStep1EstablishmentInfo() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Photo Documentation of Fire Hazards',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            'Step 1: Establishment Details',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Verify baseline metadata before proceeding to physical hazard assessment.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 16),
-          // Grid of photos
+          _buildTextField('Business Name', _businessNameController, Icons.business),
+          const SizedBox(height: 12),
+          _buildTextField('Owner / Administrator', _ownersNameController, Icons.person_outline),
+          const SizedBox(height: 12),
+          _buildTextField('Inspection Order (IO) No.', _ioTrackingController, Icons.assignment_outlined),
+          const SizedBox(height: 12),
+          _buildTextField('Contact Phone', _contactNumberController, Icons.phone_outlined, isPhone: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep2ExteriorAssessment() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Step 2: Exterior & Hydrant Assessment',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Audit fire lane clearance, hydrant proximity, and building exterior safety.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 16),
+          InspectionChoiceTile(
+            title: 'Fire Lane Access & Clear Way',
+            subtitle: 'Minimum 4-meter unobstructed width for engine access',
+            selectedValue: _checkStatusToChoice(_checklistData.meansOfEgress.corridorsClearance),
+            onChanged: (val) => setState(() => _checklistData.meansOfEgress.corridorsClearance = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+          InspectionChoiceTile(
+            title: 'Hydrant Clearance & Water Connection',
+            subtitle: 'Operational pressure & 1.5m perimeter clear from obstruction',
+            selectedValue: _checkStatusToChoice(_checklistData.fireProtectionSystems.sprinklerInfrastructure),
+            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.sprinklerInfrastructure = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep3ElectricalAndExits() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Step 3: Electrical & Means of Egress',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Check exit width, emergency illumination, and main electrical panel safety.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 16),
+          InspectionChoiceTile(
+            title: 'Exit Door Width Compliance',
+            subtitle: 'Unobstructed panic hardware and minimum exit door clearance width',
+            selectedValue: _checkStatusToChoice(_checklistData.meansOfEgress.exitDoorsWidth),
+            onChanged: (val) => setState(() => _checklistData.meansOfEgress.exitDoorsWidth = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+          InspectionChoiceTile(
+            title: 'Stairwell & Passage Clearance',
+            subtitle: 'Free of combustible debris and clearly lit',
+            selectedValue: _checkStatusToChoice(_checklistData.meansOfEgress.stairwayClearance),
+            onChanged: (val) => setState(() => _checklistData.meansOfEgress.stairwayClearance = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep4SuppressionSystems() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Step 4: Fire Suppression & Alarms',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Verify fire alarm control panel, smoke detectors, and portable extinguishers.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 16),
+          InspectionChoiceTile(
+            title: 'Fire Alarm & Detection Panel',
+            subtitle: 'Operable main control unit and audible alarm verification',
+            selectedValue: _checkStatusToChoice(_checklistData.fireProtectionSystems.fireAlarms),
+            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.fireAlarms = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+          InspectionChoiceTile(
+            title: 'Extinguisher Pressure & Maintenance Log',
+            subtitle: 'Current annual inspection tag & gauge in green zone',
+            selectedValue: _checkStatusToChoice(_checklistData.fireProtectionSystems.extinguisherPressureLogs),
+            onChanged: (val) => setState(() => _checklistData.fireProtectionSystems.extinguisherPressureLogs = _choiceToCheckStatus(val)),
+            onAddPhoto: _captureAndUploadPhoto,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep5PhotoEvidence() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Step 5: Photo Evidence & Final Signatures',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Attach mandatory hazard photographs and record inspector field notes.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 16),
+
+          // Photo Gallery
           if (_hazardPhotoUrls.isNotEmpty)
             GridView.builder(
               shrinkWrap: true,
@@ -331,28 +420,8 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
               itemCount: _hazardPhotoUrls.length,
               itemBuilder: (context, index) {
                 return ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFF334155)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Image.network(
-                      _hazardPhotoUrls[index],
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF10B981)),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(Icons.broken_image, color: Colors.white54),
-                        );
-                      },
-                    ),
-                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(_hazardPhotoUrls[index], fit: BoxFit.cover),
                 );
               },
             )
@@ -360,40 +429,32 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Center(
-                child: Text(
-                  'No hazard photos captured yet.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
-                ),
+              child: const Center(
+                child: Text('No hazard photos captured yet.', style: TextStyle(color: Color(0xFF64748B))),
               ),
             ),
-          const SizedBox(height: 24),
-          // Capture button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isUploadingPhoto ? null : _captureAndUploadPhoto,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E293B),
-                foregroundColor: const Color(0xFF10B981),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: const Color(0xFF10B981).withOpacity(0.5)),
-                ),
-                elevation: 4,
-              ),
-              icon: _isUploadingPhoto
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Color(0xFF10B981), strokeWidth: 2))
-                  : const Icon(Icons.camera_alt, size: 24),
-              label: Text(
-                _isUploadingPhoto ? 'UPLOADING...' : 'CAPTURE PHOTO',
-                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 16),
-              ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _isUploadingPhoto ? null : _captureAndUploadPhoto,
+            icon: const Icon(Icons.camera_alt_rounded),
+            label: Text(_isUploadingPhoto ? 'UPLOADING...' : 'TAKE HAZARD PHOTO'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E293B),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _inspectorNotesController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Add inspector notes or non-compliance observations...',
+              labelText: 'Inspector Observations',
             ),
           ),
         ],
@@ -401,114 +462,77 @@ class _ActiveInspectionScreenState extends State<ActiveInspectionScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    bool isPhone = false,
-  }) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {bool isPhone = false}) {
     return TextField(
       controller: controller,
-      style: const TextStyle(color: Colors.white),
       keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-        prefixIcon: Icon(icon, color: const Color(0xFF10B981).withOpacity(0.8)),
-        filled: true,
-        fillColor: const Color(0xFF1E293B),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5),
-        ),
+        prefixIcon: Icon(icon, color: const Color(0xFFD84315)),
       ),
     );
   }
 
-  Widget _buildStatusToggle({
-    required String title,
-    required CheckStatus? currentValue,
-    required Function(CheckStatus?) onChanged,
-  }) {
+  Widget _buildStickyFooter() {
+    final bool isLastStep = _currentStep == _stepTitles.length - 1;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: Colors.white,
+        border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<CheckStatus>(
-            emptySelectionAllowed: true,
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: CheckStatus.pass,
-                label: Text('Pass', style: TextStyle(fontSize: 13)),
-                icon: Icon(Icons.check, size: 18),
+          if (_currentStep > 0)
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () {
+                  _pageController.previousPage(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                child: const Text('BACK', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF475569))),
               ),
-              ButtonSegment(
-                value: CheckStatus.fail,
-                label: Text('Fail', style: TextStyle(fontSize: 13)),
-                icon: Icon(Icons.close, size: 18),
+            ),
+          if (_currentStep > 0) const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              onPressed: _isSaving
+                  ? null
+                  : () {
+                      if (isLastStep) {
+                        _saveChecklistData(isCompleting: true);
+                      } else {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isLastStep ? const Color(0xFF16A34A) : const Color(0xFFD84315),
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              ButtonSegment(
-                value: CheckStatus.notApplicable,
-                label: Text('N/A', style: TextStyle(fontSize: 13)),
-                icon: Icon(Icons.remove, size: 18),
-              ),
-            ],
-            selected: currentValue != null ? {currentValue} : {},
-            onSelectionChanged: (Set<CheckStatus> selection) {
-              if (selection.isEmpty) {
-                onChanged(null);
-              } else {
-                onChanged(selection.first);
-              }
-            },
-            style: ButtonStyle(
-              backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-                if (states.contains(MaterialState.selected)) {
-                  if (currentValue == CheckStatus.pass) return const Color(0xFF10B981).withOpacity(0.3);
-                  if (currentValue == CheckStatus.fail) return const Color(0xFFEF4444).withOpacity(0.3);
-                  return Colors.white.withOpacity(0.2); // N/A state
-                }
-                return const Color(0xFF0F172A); // Unselected background
-              }),
-              foregroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-                if (states.contains(MaterialState.selected)) {
-                  if (currentValue == CheckStatus.pass) return const Color(0xFF10B981);
-                  if (currentValue == CheckStatus.fail) return const Color(0xFFEF4444);
-                  return Colors.white;
-                }
-                return Colors.white54;
-              }),
-              side: MaterialStateProperty.all(BorderSide(color: Colors.white.withOpacity(0.1))),
-              shape: MaterialStateProperty.all(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Text(
+                _isSaving
+                    ? 'SAVING...'
+                    : (isLastStep ? 'COMPLETE AUDIT' : 'NEXT STEP'),
+                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
             ),
           ),
