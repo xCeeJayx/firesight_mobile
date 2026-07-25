@@ -112,3 +112,44 @@ USING (bucket_id = 'hazard-photos');
 CREATE POLICY "Allow authenticated users to upload hazard photos" 
 ON storage.objects FOR INSERT 
 WITH CHECK (bucket_id = 'hazard-photos' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Allow public/anon to upload hazard photos" 
+ON storage.objects FOR INSERT 
+WITH CHECK (bucket_id = 'hazard-photos');
+
+-- ============================================================================
+-- DEDICATED EMERGENCY REPORTS TABLE
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.emergency_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_name VARCHAR(255),
+    reporter_contact VARCHAR(100),
+    incident_type VARCHAR(100) NOT NULL,
+    barangay VARCHAR(100) NOT NULL,
+    address TEXT,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    description TEXT,
+    photo_url TEXT,
+    status VARCHAR(50) DEFAULT 'Unverified', -- 'Unverified', 'Dispatched', 'Resolved', 'False Alarm'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_emergency_reports_barangay ON public.emergency_reports(barangay);
+CREATE INDEX IF NOT EXISTS idx_emergency_reports_status ON public.emergency_reports(status);
+CREATE INDEX IF NOT EXISTS idx_emergency_reports_created_at ON public.emergency_reports(created_at DESC);
+
+-- Enable RLS & Policies for public reporting
+ALTER TABLE public.emergency_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anyone to insert emergency reports" ON public.emergency_reports;
+CREATE POLICY "Allow anyone to insert emergency reports" 
+ON public.emergency_reports FOR INSERT 
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anyone to view emergency reports" ON public.emergency_reports;
+CREATE POLICY "Allow anyone to view emergency reports" 
+ON public.emergency_reports FOR SELECT 
+USING (true);
+

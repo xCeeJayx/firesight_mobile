@@ -5,8 +5,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/community_urban_checklist_widget.dart';
 import 'widgets/house_to_house_checklist_widget.dart';
 
+import 'services/supabase_service.dart';
+
 class FireRiskMappingScreen extends StatefulWidget {
-  const FireRiskMappingScreen({super.key});
+  final bool isPublicUser;
+
+  const FireRiskMappingScreen({
+    super.key,
+    this.isPublicUser = false,
+  });
 
   @override
   State<FireRiskMappingScreen> createState() => _FireRiskMappingScreenState();
@@ -17,6 +24,10 @@ class _FireRiskMappingScreenState extends State<FireRiskMappingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isPublicUser) {
+      return const InteractiveRiskMapWidget(isPublicUser: true);
+    }
+
     final buttons = [
       {'label': 'GIS Risk Map', 'icon': Icons.map_rounded},
       {'label': 'Urban Risk', 'icon': Icons.holiday_village_outlined},
@@ -80,7 +91,7 @@ class _FireRiskMappingScreenState extends State<FireRiskMappingScreen> {
           // Active view body
           Expanded(
             child: _selectedTabIndex == 0
-                ? const InteractiveRiskMapWidget()
+                ? const InteractiveRiskMapWidget(isPublicUser: false)
                 : ListView(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     children: [
@@ -98,7 +109,12 @@ class _FireRiskMappingScreenState extends State<FireRiskMappingScreen> {
 }
 
 class InteractiveRiskMapWidget extends StatefulWidget {
-  const InteractiveRiskMapWidget({super.key});
+  final bool isPublicUser;
+
+  const InteractiveRiskMapWidget({
+    super.key,
+    this.isPublicUser = false,
+  });
 
   @override
   State<InteractiveRiskMapWidget> createState() => _InteractiveRiskMapWidgetState();
@@ -390,6 +406,43 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                     onSelected: (val) => setState(() => _showEvacuationMarkers = val),
                   ),
                 ],
+              ),
+            ),
+          ),
+        ),
+
+        // Persistent Floating BFP Hotline Call Button
+        Positioned(
+          bottom: 20,
+          right: 16,
+          child: Material(
+            elevation: 6,
+            borderRadius: BorderRadius.circular(30),
+            color: const Color(0xFFDC2626),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(30),
+              onTap: () => SupabaseService.callBfpHotline(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Call BFP Lingayen Hotline',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

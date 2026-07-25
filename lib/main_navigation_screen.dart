@@ -5,11 +5,16 @@ import 'schedule_screen.dart';
 import 'new_inspection_screen.dart';
 import 'fire_risk_mapping_screen.dart';
 import 'reports_screen.dart';
-import 'widgets/common/sync_indicator_chip.dart';
+import 'report_emergency_screen.dart';
 import 'login_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final bool isPublicUser;
+
+  const MainNavigationScreen({
+    super.key,
+    this.isPublicUser = false,
+  });
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
@@ -20,18 +25,68 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _inspectorName = 'FO1 Field Officer';
   String _stationBadge = 'BFP Station 4';
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const ScheduleScreen(),
-    const NewInspectionScreen(),
-    const FireRiskMappingScreen(),
-    const ReportsScreen(),
-  ];
+  late final List<Widget> _screens;
+  late final List<NavigationDestination> _navigationDestinations;
 
   @override
   void initState() {
     super.initState();
-    _fetchInspectorProfile();
+    if (widget.isPublicUser) {
+      _inspectorName = 'Citizen Guest';
+      _stationBadge = 'Public Access Mode';
+      _screens = [
+        const FireRiskMappingScreen(isPublicUser: true),
+        const ReportEmergencyScreen(),
+      ];
+      _navigationDestinations = const [
+        NavigationDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map_rounded),
+          label: 'GIS Risk Map',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.emergency_outlined),
+          selectedIcon: Icon(Icons.emergency_rounded),
+          label: 'Report Emergency',
+        ),
+      ];
+    } else {
+      _fetchInspectorProfile();
+      _screens = [
+        const HomeScreen(),
+        const ScheduleScreen(),
+        const NewInspectionScreen(),
+        const FireRiskMappingScreen(isPublicUser: false),
+        const ReportsScreen(),
+      ];
+      _navigationDestinations = const [
+        NavigationDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard_rounded),
+          label: 'Dashboard',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month_rounded),
+          label: 'Schedule',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.assignment_turned_in_outlined),
+          selectedIcon: Icon(Icons.assignment_turned_in),
+          label: 'Inspection',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.fact_check_outlined),
+          selectedIcon: Icon(Icons.fact_check_rounded),
+          label: 'Risk Mapping',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.description_outlined),
+          selectedIcon: Icon(Icons.description_rounded),
+          label: 'Reports',
+        ),
+      ];
+    }
   }
 
   Future<void> _fetchInspectorProfile() async {
@@ -70,7 +125,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   void _signOut() async {
-    await Supabase.instance.client.auth.signOut();
+    if (!widget.isPublicUser) {
+      await Supabase.instance.client.auth.signOut();
+    }
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -81,6 +138,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isGuest = widget.isPublicUser;
+
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 68,
@@ -91,10 +150,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: const Color(0xFFD84315).withOpacity(0.15),
-              child: const Icon(
-                Icons.person_pin_rounded,
-                color: Color(0xFFD84315),
+              backgroundColor: isGuest
+                  ? const Color(0xFFDC2626).withValues(alpha: 0.15)
+                  : const Color(0xFFD84315).withValues(alpha: 0.15),
+              child: Icon(
+                isGuest ? Icons.person_pin_circle_rounded : Icons.person_pin_rounded,
+                color: isGuest ? const Color(0xFFDC2626) : const Color(0xFFD84315),
                 size: 26,
               ),
             ),
@@ -117,14 +178,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.shield_outlined, size: 12, color: Color(0xFFD84315)),
+                      Icon(
+                        isGuest ? Icons.public_rounded : Icons.shield_outlined,
+                        size: 12,
+                        color: isGuest ? const Color(0xFFDC2626) : const Color(0xFFD84315),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _stationBadge,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w500,
+                          color: isGuest ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -135,11 +200,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 22),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
-          ),
+          if (isGuest)
+            TextButton.icon(
+              onPressed: _signOut,
+              icon: const Icon(Icons.login_rounded, size: 18, color: Color(0xFFD84315)),
+              label: const Text('BFP Login', style: TextStyle(color: Color(0xFFD84315), fontWeight: FontWeight.bold, fontSize: 13)),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 22),
+              onPressed: _signOut,
+              tooltip: 'Sign Out',
+            ),
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
@@ -157,33 +229,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Schedule',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.assignment_turned_in_outlined),
-            selectedIcon: Icon(Icons.assignment_turned_in),
-            label: 'Inspection',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check_rounded),
-            label: 'Risk Mapping',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.description_outlined),
-            selectedIcon: Icon(Icons.description_rounded),
-            label: 'Reports',
-          ),
-        ],
+        destinations: _navigationDestinations,
       ),
     );
   }
