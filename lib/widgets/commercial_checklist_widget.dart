@@ -5,7 +5,18 @@ import 'package:image_picker/image_picker.dart';
 import '../models/commercial_checklist_model.dart';
 
 class CommercialChecklistWidget extends StatefulWidget {
-  const CommercialChecklistWidget({super.key});
+  final String? assignmentId;
+  final String? initialIoNumber;
+  final String? initialBusinessName;
+  final String? initialAddress;
+
+  const CommercialChecklistWidget({
+    super.key,
+    this.assignmentId,
+    this.initialIoNumber,
+    this.initialBusinessName,
+    this.initialAddress,
+  });
 
   @override
   State<CommercialChecklistWidget> createState() => _CommercialChecklistWidgetState();
@@ -78,7 +89,164 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialIoNumber != null && widget.initialIoNumber!.isNotEmpty) {
+      _ioNumberCtrl.text = widget.initialIoNumber!;
+    }
+    if (widget.initialBusinessName != null && widget.initialBusinessName!.isNotEmpty) {
+      _businessNameCtrl.text = widget.initialBusinessName!;
+    }
+    if (widget.initialAddress != null && widget.initialAddress!.isNotEmpty) {
+      _addressCtrl.text = widget.initialAddress!;
+    }
     _dateInspectedCtrl.text = DateTime.now().toString().split(' ')[0];
+
+    if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
+      _fetchExistingInspection();
+    }
+  }
+
+  Future<void> _fetchExistingInspection() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('inspections')
+          .select()
+          .eq('id', widget.assignmentId!)
+          .maybeSingle();
+
+      if (response != null && mounted) {
+        setState(() {
+          if (response['inspection_order_no'] != null && response['inspection_order_no'].toString().isNotEmpty) {
+            _ioNumberCtrl.text = response['inspection_order_no'].toString();
+          }
+          if (response['business_name'] != null && response['business_name'].toString().isNotEmpty) {
+            _businessNameCtrl.text = response['business_name'].toString();
+          }
+          if (response['address'] != null && response['address'].toString().isNotEmpty) {
+            _addressCtrl.text = response['address'].toString();
+          }
+          if (response['date_issued'] != null) {
+            _dateIssuedCtrl.text = response['date_issued'].toString().split('T').first;
+          }
+          if (response['date_inspected'] != null) {
+            _dateInspectedCtrl.text = response['date_inspected'].toString().split('T').first;
+          }
+          if (response['hazard_photo_urls'] != null) {
+            _photoUrls.clear();
+            _photoUrls.addAll(List<String>.from(response['hazard_photo_urls']));
+          }
+
+          if (response['checklist_data'] != null && response['checklist_data'] is Map<String, dynamic>) {
+            final Map<String, dynamic> data = response['checklist_data'];
+            final loadedModel = CommercialChecklistModel.fromJson(data);
+
+            _model.ioNumber = loadedModel.ioNumber;
+            _model.dateIssued = loadedModel.dateIssued;
+            _model.dateInspected = loadedModel.dateInspected;
+            _model.inspectionNature = loadedModel.inspectionNature;
+            _model.verificationType = loadedModel.verificationType;
+            _model.natureOthersSpecify = loadedModel.natureOthersSpecify;
+            _model.fsccrRequired = loadedModel.fsccrRequired;
+            _model.fsmrRequired = loadedModel.fsmrRequired;
+
+            _model.buildingName = loadedModel.buildingName;
+            _model.address = loadedModel.address;
+            _model.businessName = loadedModel.businessName;
+            _model.natureOfBusiness = loadedModel.natureOfBusiness;
+            _model.ownerRepresentative = loadedModel.ownerRepresentative;
+            _model.contactNo = loadedModel.contactNo;
+
+            _model.fsecNo = loadedModel.fsecNo;
+            _model.fsecDateIssued = loadedModel.fsecDateIssued;
+            _model.buildingPermitNo = loadedModel.buildingPermitNo;
+            _model.buildingPermitDateIssued = loadedModel.buildingPermitDateIssued;
+
+            _model.fsicNoLatest = loadedModel.fsicNoLatest;
+            _model.fsicDateIssued = loadedModel.fsicDateIssued;
+            _model.fireDrillCertNo = loadedModel.fireDrillCertNo;
+            _model.fireDrillDateIssued = loadedModel.fireDrillDateIssued;
+            _model.businessPermitNo = loadedModel.businessPermitNo;
+            _model.businessPermitDateIssued = loadedModel.businessPermitDateIssued;
+            _model.fireInsurancePolicyNo = loadedModel.fireInsurancePolicyNo;
+            _model.fireInsuranceDateIssued = loadedModel.fireInsuranceDateIssued;
+
+            _model.constructionType = loadedModel.constructionType;
+            _model.interiorFinishWalls = loadedModel.interiorFinishWalls;
+            _model.interiorFinishFloor = loadedModel.interiorFinishFloor;
+
+            _model.basementUsage = loadedModel.basementUsage;
+            _model.groundFloorUsage = loadedModel.groundFloorUsage;
+            _model.secondFloorUsage = loadedModel.secondFloorUsage;
+            _model.thirdFloorUsage = loadedModel.thirdFloorUsage;
+            _model.fourthFloorUsage = loadedModel.fourthFloorUsage;
+            _model.nthFloorUsage = loadedModel.nthFloorUsage;
+
+            _model.occupancyClassification = loadedModel.occupancyClassification;
+            _model.occupantLoad = loadedModel.occupantLoad;
+            _model.numberOfStories = loadedModel.numberOfStories;
+            _model.buildingHeight = loadedModel.buildingHeight;
+            _model.isHighrise = loadedModel.isHighrise;
+
+            _model.egressAccessStatus = loadedModel.egressAccessStatus;
+            _model.exitComponentsStatus = loadedModel.exitComponentsStatus;
+            _model.egressRequirementsStatus = loadedModel.egressRequirementsStatus;
+            _model.exitSignageStatus = loadedModel.exitSignageStatus;
+            _model.hazardStatus = loadedModel.hazardStatus;
+            _model.fireProtectionStatus = loadedModel.fireProtectionStatus;
+            _model.itemDimensions = loadedModel.itemDimensions;
+
+            _model.defectsSummary = loadedModel.defectsSummary;
+            _model.recommendationAction = loadedModel.recommendationAction;
+            _model.inspectorName = loadedModel.inspectorName;
+            _model.teamLeaderName = loadedModel.teamLeaderName;
+            _model.fireMarshalName = loadedModel.fireMarshalName;
+
+            if (_model.ioNumber.isNotEmpty) _ioNumberCtrl.text = _model.ioNumber;
+            if (_model.dateIssued.isNotEmpty) _dateIssuedCtrl.text = _model.dateIssued;
+            if (_model.dateInspected.isNotEmpty) _dateInspectedCtrl.text = _model.dateInspected;
+            if (_model.natureOthersSpecify != null && _model.natureOthersSpecify!.isNotEmpty) _natureOthersCtrl.text = _model.natureOthersSpecify!;
+
+            if (_model.buildingName.isNotEmpty) _buildingNameCtrl.text = _model.buildingName;
+            if (_model.address.isNotEmpty) _addressCtrl.text = _model.address;
+            if (_model.businessName.isNotEmpty) _businessNameCtrl.text = _model.businessName;
+            if (_model.natureOfBusiness.isNotEmpty) _natureOfBusinessCtrl.text = _model.natureOfBusiness;
+            if (_model.ownerRepresentative.isNotEmpty) _ownerRepresentativeCtrl.text = _model.ownerRepresentative;
+            if (_model.contactNo.isNotEmpty) _contactNoCtrl.text = _model.contactNo;
+
+            if (_model.fsecNo.isNotEmpty) _fsecNoCtrl.text = _model.fsecNo;
+            if (_model.fsecDateIssued.isNotEmpty) _fsecDateCtrl.text = _model.fsecDateIssued;
+            if (_model.buildingPermitNo.isNotEmpty) _buildingPermitNoCtrl.text = _model.buildingPermitNo;
+            if (_model.buildingPermitDateIssued.isNotEmpty) _buildingPermitDateCtrl.text = _model.buildingPermitDateIssued;
+
+            if (_model.fsicNoLatest.isNotEmpty) _fsicNoLatestCtrl.text = _model.fsicNoLatest;
+            if (_model.fsicDateIssued.isNotEmpty) _fsicDateCtrl.text = _model.fsicDateIssued;
+            if (_model.fireDrillCertNo.isNotEmpty) _fireDrillCertCtrl.text = _model.fireDrillCertNo;
+            if (_model.fireDrillDateIssued.isNotEmpty) _fireDrillDateCtrl.text = _model.fireDrillDateIssued;
+            if (_model.businessPermitNo.isNotEmpty) _businessPermitNoCtrl.text = _model.businessPermitNo;
+            if (_model.businessPermitDateIssued.isNotEmpty) _businessPermitDateCtrl.text = _model.businessPermitDateIssued;
+            if (_model.fireInsurancePolicyNo.isNotEmpty) _fireInsurancePolicyNoCtrl.text = _model.fireInsurancePolicyNo;
+            if (_model.fireInsuranceDateIssued.isNotEmpty) _fireInsuranceDateCtrl.text = _model.fireInsuranceDateIssued;
+
+            if (_model.basementUsage.isNotEmpty) _basementCtrl.text = _model.basementUsage;
+            if (_model.groundFloorUsage.isNotEmpty) _groundFloorCtrl.text = _model.groundFloorUsage;
+            if (_model.secondFloorUsage.isNotEmpty) _secondFloorCtrl.text = _model.secondFloorUsage;
+            if (_model.thirdFloorUsage.isNotEmpty) _thirdFloorCtrl.text = _model.thirdFloorUsage;
+            if (_model.fourthFloorUsage.isNotEmpty) _fourthFloorCtrl.text = _model.fourthFloorUsage;
+            if (_model.nthFloorUsage.isNotEmpty) _nthFloorCtrl.text = _model.nthFloorUsage;
+
+            if (_model.occupantLoad.isNotEmpty) _occupantLoadCtrl.text = _model.occupantLoad;
+            if (_model.numberOfStories.isNotEmpty) _numberOfStoriesCtrl.text = _model.numberOfStories;
+            if (_model.buildingHeight.isNotEmpty) _buildingHeightCtrl.text = _model.buildingHeight;
+
+            if (_model.defectsSummary.isNotEmpty) _defectsSummaryCtrl.text = _model.defectsSummary;
+            if (_model.inspectorName.isNotEmpty) _inspectorNameCtrl.text = _model.inspectorName;
+            if (_model.teamLeaderName.isNotEmpty) _teamLeaderNameCtrl.text = _model.teamLeaderName;
+            if (_model.fireMarshalName.isNotEmpty) _fireMarshalNameCtrl.text = _model.fireMarshalName;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching existing inspection: $e');
+    }
   }
 
   @override
@@ -202,7 +370,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     payloadData['checklist_type'] = 'commercial';
 
     try {
-      await Supabase.instance.client.from('inspections').insert({
+      final updatePayload = <String, dynamic>{
         'inspector_id': userId,
         'checklist_type': 'commercial',
         'inspection_order_no': _model.ioNumber.isNotEmpty ? _model.ioNumber : 'IO-${DateTime.now().millisecondsSinceEpoch}',
@@ -218,7 +386,18 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         'rating': _model.recommendationAction ?? 'Inspected',
         'checklist_data': payloadData,
         'hazard_photo_urls': _photoUrls,
-      });
+      };
+
+      if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
+        await Supabase.instance.client
+            .from('inspections')
+            .update(updatePayload)
+            .eq('id', widget.assignmentId!);
+      } else {
+        await Supabase.instance.client
+            .from('inspections')
+            .insert(updatePayload);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

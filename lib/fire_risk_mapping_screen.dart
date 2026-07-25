@@ -106,16 +106,17 @@ class InteractiveRiskMapWidget extends StatefulWidget {
 
 class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
   bool _isLoading = true;
-  bool _showSitioMarkers = true;
+  bool _showBarangayMarkers = true;
   bool _showHydrantMarkers = true;
   bool _showEvacuationMarkers = true;
 
-  List<Map<String, dynamic>> _sitioSurveys = [];
+  List<Map<String, dynamic>> _barangays = [];
   List<Map<String, dynamic>> _hydrants = [];
   List<Map<String, dynamic>> _evacuationCenters = [];
 
-  // Default map center: Lingayen, Pangasinan
-  static const LatLng _lingayenCenter = LatLng(16.0242, 120.2300);
+  // Configured Viewport for full Municipality of Lingayen, Pangasinan
+  static const LatLng _lingayenCenter = LatLng(15.9950, 120.2250);
+  static const double _initialZoomLevel = 12.8;
 
   @override
   void initState() {
@@ -127,51 +128,41 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
     try {
       final client = Supabase.instance.client;
 
-      // 1. Fetch fire risk surveys
+      // 1. Query barangays (All 32 Barangays)
       try {
-        final surveyRes = await client.from('fire_risk_surveys').select();
-        _sitioSurveys = List<Map<String, dynamic>>.from(surveyRes);
+        final barangayRes = await client.from('barangays').select();
+        _barangays = List<Map<String, dynamic>>.from(barangayRes);
       } catch (e) {
-        debugPrint('fire_risk_surveys fetch error: $e');
+        debugPrint('barangays fetch error: $e');
       }
 
-      // 2. Fetch hydrants
+      // 2. Query hydrants
       try {
-        final hydrantRes = await client.from('hydrants').select();
+        final hydrantRes = await client.from('hydrants').select('id, hydrant_no, location, barangay, latitude, longitude, status, color, remarks');
         _hydrants = List<Map<String, dynamic>>.from(hydrantRes);
       } catch (e) {
         debugPrint('hydrants fetch error: $e');
       }
 
-      // 3. Fetch evacuation centers
+      // 3. Query evacuation_centers (STRICTLY live Supabase data, no mock fallbacks)
       try {
         final evacRes = await client.from('evacuation_centers').select();
         _evacuationCenters = List<Map<String, dynamic>>.from(evacRes);
       } catch (e) {
         debugPrint('evacuation_centers fetch error: $e');
+        _evacuationCenters = [];
       }
 
-      // If empty in Supabase, add fallback Lingayen data points for demonstration
-      if (_sitioSurveys.isEmpty) {
-        _sitioSurveys = [
-          {'purok_name': 'Purok 1, Poblacion', 'latitude': 16.0245, 'longitude': 120.2310, 'rating': 3, 'score': 14},
-          {'purok_name': 'Sitio Libtone, Baay', 'latitude': 16.0290, 'longitude': 120.2250, 'rating': 4, 'score': 32},
-          {'purok_name': 'Purok 4, Maniboc (Riverbank)', 'latitude': 16.0180, 'longitude': 120.2360, 'rating': 5, 'score': 48},
-        ];
-      }
-
+      // Fallback data for Hydrants if offline or empty
       if (_hydrants.isEmpty) {
         _hydrants = [
-          {'location': 'Town Plaza Primewater Outlet', 'barangay': 'Poblacion', 'status': 'Operational', 'latitude': 16.0240, 'longitude': 120.2315},
-          {'location': 'Maniboc Elementary Hydrant', 'barangay': 'Maniboc', 'status': 'Operational', 'latitude': 16.0195, 'longitude': 120.2340},
-          {'location': 'Baay Crossing Hydrant', 'barangay': 'Baay', 'status': 'Defective', 'latitude': 16.0280, 'longitude': 120.2230},
-        ];
-      }
-
-      if (_evacuationCenters.isEmpty) {
-        _evacuationCenters = [
-          {'name': 'Lingayen Civic Center', 'barangay': 'Poblacion', 'capacity': 500, 'latitude': 16.0255, 'longitude': 120.2305},
-          {'name': 'Pangasinan National High Gym', 'barangay': 'Artacho', 'capacity': 800, 'latitude': 16.0210, 'longitude': 120.2280},
+          {'hydrant_no': '#117', 'location': 'Tonton West (Pump Station No. 3)', 'barangay': 'Tonton West', 'latitude': 16.0267751, 'longitude': 120.2498305, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#44', 'location': 'Avenida Rizal St. East (Infront of Petron)', 'barangay': 'Poblacion', 'latitude': 16.0232040, 'longitude': 120.2384332, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#20', 'location': 'Artacho St. (Corner Ramos St. West)', 'barangay': 'Poblacion', 'latitude': 16.0233771, 'longitude': 120.2344507, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#91', 'location': 'Alvear St. West (Corner Artacho St.)', 'barangay': 'Poblacion', 'latitude': 16.0255989, 'longitude': 120.2285535, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#14', 'location': 'Sto. Niño St. West & Iron Works', 'barangay': 'Baay', 'latitude': 16.0103560, 'longitude': 120.2284970, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#48', 'location': 'Solis St. Poblacion (Below footbridge)', 'barangay': 'Poblacion', 'latitude': 16.0202090, 'longitude': 120.2313050, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+          {'hydrant_no': '#111', 'location': '#23 Maramba Blvd. (Sto. Cruz St.)', 'barangay': 'Poblacion', 'latitude': 16.0284010, 'longitude': 120.2335210, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
         ];
       }
     } catch (e) {
@@ -187,58 +178,72 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 8),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+            ),
           ],
         ),
-        content: Text(subtitle, style: const TextStyle(fontSize: 14)),
+        content: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CLOSE'),
+            child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD84315))),
           ),
         ],
       ),
     );
   }
 
-  List<Marker> _buildSitioMarkers() {
-    return _sitioSurveys.map((item) {
-      final lat = (item['latitude'] as num?)?.toDouble() ?? 16.0242;
-      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2300;
-      final name = item['purok_name']?.toString() ?? 'Sitio Fire Risk';
-      final score = item['score'] ?? item['total_score'] ?? 0;
-      final rating = item['rating'] ?? item['vulnerability_rating'] ?? 3;
+  List<Marker> _buildBarangayMarkers() {
+    return _barangays.map((item) {
+      final lat = (item['latitude'] as num?)?.toDouble() ?? 15.9950;
+      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2250;
+      final rawName = item['name']?.toString() ?? 'Barangay';
+      final displayName = rawName.toLowerCase().startsWith('brgy') ? rawName : 'Brgy. $rawName';
+      final pop = item['population'] != null ? '${item['population']} residents' : 'N/A';
+      final legalCode = item['legal_code'] ?? item['code'] ?? item['psgc_code'] ?? 'N/A';
 
-      Color color = const Color(0xFF2ECC71); // Green - Rating 3
-      String statusLabel = 'Rating 3: Mildly Vulnerable';
-      if (rating >= 5 || score >= 40) {
-        color = const Color(0xFFE74C3C); // Red - Rating 5
-        statusLabel = 'Rating 5: Highly Vulnerable';
-      } else if (rating >= 4 || score >= 20) {
-        color = const Color(0xFFF1C40F); // Yellow - Rating 4
-        statusLabel = 'Rating 4: Moderately Vulnerable';
-      }
+      const color = Color(0xFF1E293B);
 
       return Marker(
         point: LatLng(lat, lng),
         width: 44,
         height: 44,
         child: GestureDetector(
-          onTap: () => _showDetailsDialog(name, 'Vulnerability: $statusLabel\nTotal YES Score: $score', Icons.warning_amber_rounded, color),
+          onTap: () => _showDetailsDialog(
+            displayName,
+            'Population (2024): $pop\nLegal Code: $legalCode\nCoordinates: $lat, $lng',
+            Icons.location_city_rounded,
+            color,
+          ),
           child: Container(
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.9),
+              color: color,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 2)),
               ],
             ),
-            child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.location_city_rounded, color: Colors.white, size: 22),
           ),
         ),
       );
@@ -247,21 +252,25 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
 
   List<Marker> _buildHydrantMarkers() {
     return _hydrants.map((item) {
-      final lat = (item['latitude'] as num?)?.toDouble() ?? 16.0242;
-      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2300;
+      final lat = (item['latitude'] as num?)?.toDouble() ?? 15.9950;
+      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2250;
+      final hydrantNo = item['hydrant_no']?.toString() ?? '';
       final loc = item['location']?.toString() ?? 'Primewater Hydrant';
-      final barangay = item['barangay']?.toString() ?? '';
+      final barangay = item['barangay']?.toString() ?? 'Lingayen';
       final status = item['status']?.toString() ?? 'Operational';
+      final remarks = item['remarks']?.toString() ?? 'Coupling Compatible';
       final isOperational = status.toLowerCase() == 'operational';
 
       final color = isOperational ? const Color(0xFF0284C7) : const Color(0xFFDC2626);
+      final title = hydrantNo.isNotEmpty ? '💧 Hydrant $hydrantNo' : '💧 $loc';
+      final details = 'Location: $loc\nBarangay: $barangay\nStatus: $status\nRemarks: $remarks';
 
       return Marker(
         point: LatLng(lat, lng),
         width: 40,
         height: 40,
         child: GestureDetector(
-          onTap: () => _showDetailsDialog('💧 $loc', 'Barangay: $barangay\nStatus: $status', Icons.water_drop_rounded, color),
+          onTap: () => _showDetailsDialog(title, details, Icons.water_drop_rounded, color),
           child: Container(
             decoration: BoxDecoration(
               color: color,
@@ -280,8 +289,8 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
 
   List<Marker> _buildEvacuationMarkers() {
     return _evacuationCenters.map((item) {
-      final lat = (item['latitude'] as num?)?.toDouble() ?? 16.0242;
-      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2300;
+      final lat = (item['latitude'] as num?)?.toDouble() ?? 15.9950;
+      final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2250;
       final name = item['name']?.toString() ?? 'Evacuation Center';
       final barangay = item['barangay']?.toString() ?? '';
       final cap = item['capacity']?.toString() ?? 'N/A';
@@ -293,7 +302,12 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
         width: 42,
         height: 42,
         child: GestureDetector(
-          onTap: () => _showDetailsDialog('🏫 $name', 'Barangay: $barangay\nDesignated Capacity: $cap Persons', Icons.night_shelter_rounded, color),
+          onTap: () => _showDetailsDialog(
+            '🏫 $name',
+            'Barangay: $barangay\nDesignated Capacity: $cap Persons',
+            Icons.night_shelter_rounded,
+            color,
+          ),
           child: Container(
             decoration: BoxDecoration(
               color: color,
@@ -321,14 +335,14 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
         FlutterMap(
           options: const MapOptions(
             initialCenter: _lingayenCenter,
-            initialZoom: 14.0,
+            initialZoom: _initialZoomLevel,
           ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.bfp.firesight_mobile',
             ),
-            if (_showSitioMarkers) MarkerLayer(markers: _buildSitioMarkers()),
+            if (_showBarangayMarkers) MarkerLayer(markers: _buildBarangayMarkers()),
             if (_showHydrantMarkers) MarkerLayer(markers: _buildHydrantMarkers()),
             if (_showEvacuationMarkers) MarkerLayer(markers: _buildEvacuationMarkers()),
           ],
@@ -353,11 +367,11 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
               child: Row(
                 children: [
                   FilterChip(
-                    selected: _showSitioMarkers,
-                    label: const Text('🔴/🟡/🟢 Sitios', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    selectedColor: const Color(0xFFFEE2E2),
-                    checkmarkColor: const Color(0xFFDC2626),
-                    onSelected: (val) => setState(() => _showSitioMarkers = val),
+                    selected: _showBarangayMarkers,
+                    label: const Text('🏛️ Barangays', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    selectedColor: const Color(0xFFE2E8F0),
+                    checkmarkColor: const Color(0xFF1E293B),
+                    onSelected: (val) => setState(() => _showBarangayMarkers = val),
                   ),
                   const SizedBox(width: 6),
                   FilterChip(
