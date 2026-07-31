@@ -169,6 +169,44 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
         _evacuationCenters = [];
       }
 
+      // Fallback data for Barangays (All 32 Barangays of Lingayen) if offline or empty
+      if (_barangays.isEmpty) {
+        _barangays = [
+          {'name': 'Aliwekwek', 'population': '1,745', 'legal_code': '105522001', 'latitude': 15.9686, 'longitude': 120.2458},
+          {'name': 'Baay', 'population': '5,324', 'legal_code': '105522002', 'latitude': 16.0117, 'longitude': 120.2334},
+          {'name': 'Balangobong', 'population': '1,299', 'legal_code': '105522003', 'latitude': 15.9902, 'longitude': 120.2198},
+          {'name': 'Balococ', 'population': '2,233', 'legal_code': '105522004', 'latitude': 15.9863, 'longitude': 120.2492},
+          {'name': 'Bantayan', 'population': '1,343', 'legal_code': '105522006', 'latitude': 15.9996, 'longitude': 120.2031},
+          {'name': 'Basing', 'population': '3,103', 'legal_code': '105522007', 'latitude': 15.9984, 'longitude': 120.2523},
+          {'name': 'Capandanan', 'population': '2,544', 'legal_code': '105522008', 'latitude': 16.0076, 'longitude': 120.1979},
+          {'name': 'Domalandan Center', 'population': '2,100', 'legal_code': '105522009', 'latitude': 16.0156, 'longitude': 120.2016},
+          {'name': 'Domalandan East', 'population': '2,449', 'legal_code': '105522010', 'latitude': 16.0123, 'longitude': 120.2117},
+          {'name': 'Domalandan West', 'population': '2,727', 'legal_code': '105522011', 'latitude': 16.0201, 'longitude': 120.1884},
+          {'name': 'Dorongan', 'population': '1,605', 'legal_code': '105522012', 'latitude': 15.9768, 'longitude': 120.2155},
+          {'name': 'Dulag', 'population': '3,556', 'legal_code': '105522013', 'latitude': 15.9881, 'longitude': 120.2332},
+          {'name': 'Estanza', 'population': '4,675', 'legal_code': '105522014', 'latitude': 16.0254, 'longitude': 120.1702},
+          {'name': 'Lasip', 'population': '4,057', 'legal_code': '105522015', 'latitude': 15.9989, 'longitude': 120.2323},
+          {'name': 'Libsong East', 'population': '4,050', 'legal_code': '105522016', 'latitude': 16.0352, 'longitude': 120.2411},
+          {'name': 'Libsong West', 'population': '3,923', 'legal_code': '105522017', 'latitude': 16.0360, 'longitude': 120.2319},
+          {'name': 'Malawa', 'population': '3,091', 'legal_code': '105522018', 'latitude': 15.9796, 'longitude': 120.2589},
+          {'name': 'Malimpuec', 'population': '3,744', 'legal_code': '105522019', 'latitude': 16.0347, 'longitude': 120.1852},
+          {'name': 'Maniboc', 'population': '4,964', 'legal_code': '105522020', 'latitude': 16.0315, 'longitude': 120.2185},
+          {'name': 'Matalava', 'population': '2,752', 'legal_code': '105522021', 'latitude': 15.9905, 'longitude': 120.2647},
+          {'name': 'Naguelguel', 'population': '2,058', 'legal_code': '105522022', 'latitude': 15.9664, 'longitude': 120.2311},
+          {'name': 'Namolan', 'population': '3,456', 'legal_code': '105522023', 'latitude': 15.9748, 'longitude': 120.2435},
+          {'name': 'Pangapisan North', 'population': '2,630', 'legal_code': '105522024', 'latitude': 16.0381, 'longitude': 120.2033},
+          {'name': 'Pangapisan Sur', 'population': '2,668', 'legal_code': '105522025', 'latitude': 16.0275, 'longitude': 120.2021},
+          {'name': 'Poblacion', 'population': '4,117', 'legal_code': '105522026', 'latitude': 16.0234, 'longitude': 120.2314},
+          {'name': 'Quibaol', 'population': '2,425', 'legal_code': '105522027', 'latitude': 15.9711, 'longitude': 120.2574},
+          {'name': 'Rosario', 'population': '2,752', 'legal_code': '105522028', 'latitude': 15.9449, 'longitude': 120.2671},
+          {'name': 'Sabangan', 'population': '2,683', 'legal_code': '105522029', 'latitude': 16.0406, 'longitude': 120.1917},
+          {'name': 'Talogtog', 'population': '1,821', 'legal_code': '105522030', 'latitude': 15.9863, 'longitude': 120.1989},
+          {'name': 'Tonton', 'population': '4,923', 'legal_code': '105522031', 'latitude': 16.0263, 'longitude': 120.2520},
+          {'name': 'Tumbar', 'population': '2,906', 'legal_code': '105522032', 'latitude': 15.9981, 'longitude': 120.2434},
+          {'name': 'Wawa', 'population': '4,312', 'legal_code': '105522033', 'latitude': 16.0401, 'longitude': 120.2198},
+        ];
+      }
+
       // Fallback data for Hydrants if offline or empty
       if (_hydrants.isEmpty) {
         _hydrants = [
@@ -179,6 +217,16 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
           {'hydrant_no': '#14', 'location': 'Sto. Niño St. West & Iron Works', 'barangay': 'Baay', 'latitude': 16.0103560, 'longitude': 120.2284970, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
           {'hydrant_no': '#48', 'location': 'Solis St. Poblacion (Below footbridge)', 'barangay': 'Poblacion', 'latitude': 16.0202090, 'longitude': 120.2313050, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
           {'hydrant_no': '#111', 'location': '#23 Maramba Blvd. (Sto. Cruz St.)', 'barangay': 'Poblacion', 'latitude': 16.0284010, 'longitude': 120.2335210, 'status': 'Operational', 'remarks': 'Coupling Compatible'},
+        ];
+      }
+
+      // Fallback data for Evacuation Centers if offline or empty
+      if (_evacuationCenters.isEmpty) {
+        _evacuationCenters = [
+          {'name': 'Lingayen Evacuation Center', 'barangay': 'Poblacion', 'capacity': 500, 'latitude': 16.0245, 'longitude': 120.2345},
+          {'name': 'Domalandan Civic Center', 'barangay': 'Domalandan Center', 'capacity': 300, 'latitude': 16.0156, 'longitude': 120.2016},
+          {'name': 'Baay Covered Court Shelter', 'barangay': 'Baay', 'capacity': 250, 'latitude': 16.0117, 'longitude': 120.2334},
+          {'name': 'Libsong West Evacuation Site', 'barangay': 'Libsong West', 'capacity': 400, 'latitude': 16.0360, 'longitude': 120.2319},
         ];
       }
     } catch (e) {
@@ -278,7 +326,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
       final isOperational = status.toLowerCase() == 'operational';
 
       final color = isOperational ? const Color(0xFF0284C7) : const Color(0xFFDC2626);
-      final title = hydrantNo.isNotEmpty ? '💧 Hydrant $hydrantNo' : '💧 $loc';
+      final title = hydrantNo.isNotEmpty ? 'Hydrant $hydrantNo' : loc;
       final details = 'Location: $loc\nBarangay: $barangay\nStatus: $status\nRemarks: $remarks';
 
       return Marker(
@@ -319,7 +367,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
         height: 42,
         child: GestureDetector(
           onTap: () => _showDetailsDialog(
-            '🏫 $name',
+            name,
             'Barangay: $barangay\nDesignated Capacity: $cap Persons',
             Icons.night_shelter_rounded,
             color,
@@ -384,25 +432,40 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                 children: [
                   FilterChip(
                     selected: _showBarangayMarkers,
-                    label: const Text('🏛️ Barangays', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    showCheckmark: false,
+                    avatar: Icon(
+                      Icons.location_city_rounded,
+                      size: 16,
+                      color: _showBarangayMarkers ? const Color(0xFF1E293B) : const Color(0xFF64748B),
+                    ),
+                    label: const Text('Barangays', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     selectedColor: const Color(0xFFE2E8F0),
-                    checkmarkColor: const Color(0xFF1E293B),
                     onSelected: (val) => setState(() => _showBarangayMarkers = val),
                   ),
                   const SizedBox(width: 6),
                   FilterChip(
                     selected: _showHydrantMarkers,
-                    label: const Text('💧 Hydrants', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    showCheckmark: false,
+                    avatar: Icon(
+                      Icons.water_drop_rounded,
+                      size: 16,
+                      color: _showHydrantMarkers ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                    ),
+                    label: const Text('Hydrants', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     selectedColor: const Color(0xFFE0F2FE),
-                    checkmarkColor: const Color(0xFF0284C7),
                     onSelected: (val) => setState(() => _showHydrantMarkers = val),
                   ),
                   const SizedBox(width: 6),
                   FilterChip(
                     selected: _showEvacuationMarkers,
-                    label: const Text('🏫 Shelters', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    showCheckmark: false,
+                    avatar: Icon(
+                      Icons.night_shelter_rounded,
+                      size: 16,
+                      color: _showEvacuationMarkers ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
+                    ),
+                    label: const Text('Shelters', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     selectedColor: const Color(0xFFF3E8FF),
-                    checkmarkColor: const Color(0xFF7C3AED),
                     onSelected: (val) => setState(() => _showEvacuationMarkers = val),
                   ),
                 ],
@@ -411,42 +474,43 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
           ),
         ),
 
-        // Persistent Floating BFP Hotline Call Button
-        Positioned(
-          bottom: 20,
-          right: 16,
-          child: Material(
-            elevation: 6,
-            borderRadius: BorderRadius.circular(30),
-            color: const Color(0xFFDC2626),
-            child: InkWell(
+        // Persistent Floating BFP Hotline Call Button (Public Citizen Mode Only)
+        if (widget.isPublicUser)
+          Positioned(
+            bottom: 20,
+            right: 16,
+            child: Material(
+              elevation: 6,
               borderRadius: BorderRadius.circular(30),
-              onTap: () => SupabaseService.callBfpHotline(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Call BFP Lingayen Hotline',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        letterSpacing: 0.3,
+              color: const Color(0xFFDC2626),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(30),
+                onTap: () => SupabaseService.callBfpHotline(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Call BFP Lingayen Hotline',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

@@ -153,3 +153,16 @@ CREATE POLICY "Allow anyone to view emergency reports"
 ON public.emergency_reports FOR SELECT 
 USING (true);
 
+-- Ensure public read access for GIS tables (Barangays, Hydrants, Evacuation Centers)
+ALTER TABLE IF EXISTS public.barangays ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public to view barangays" ON public.barangays;
+CREATE POLICY "Allow public to view barangays" ON public.barangays FOR SELECT USING (true);
+
+ALTER TABLE IF EXISTS public.hydrants ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public to view hydrants" ON public.hydrants;
+CREATE POLICY "Allow public to view hydrants" ON public.hydrants FOR SELECT USING (true);
+
+ALTER TABLE IF EXISTS public.evacuation_centers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public to view evacuation_centers" ON public.evacuation_centers;
+CREATE POLICY "Allow public to view evacuation_centers" ON public.evacuation_centers FOR SELECT USING (true);
+
