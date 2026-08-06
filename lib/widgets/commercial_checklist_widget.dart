@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/commercial_checklist_model.dart';
+import '../services/auth_service.dart';
 
 class CommercialChecklistWidget extends StatefulWidget {
   final String? assignmentId;
@@ -25,16 +26,16 @@ class CommercialChecklistWidget extends StatefulWidget {
 class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   final _model = CommercialChecklistModel();
 
-  // Color theme
-  final Color primaryColor = const Color(0xFFF95921);
-  final Color successColor = const Color(0xFF10B981);
-  final Color warningColor = const Color(0xFFF59E0B);
-  final Color errorColor = const Color(0xFFEF4444);
+  // Design Tokens
+  final Color primaryColor = const Color(0xFFEA580C);
+  final Color successColor = const Color(0xFF16A34A);
+  final Color warningColor = const Color(0xFFD97706);
+  final Color errorColor = const Color(0xFFDC2626);
   final Color surfaceColor = Colors.white;
   final Color borderColor = const Color(0xFFE2E8F0);
-  final Color titleColor = const Color(0xFF1E293B);
-  final Color subtitleColor = const Color(0xFF64748B);
-  final Color inputBgColor = const Color(0xFFF1F5F9);
+  final Color titleColor = const Color(0xFF0F172A);
+  final Color subtitleColor = const Color(0xFF475569);
+  final Color inputBgColor = const Color(0xFFF8FAFC);
 
   final List<String> _photoUrls = [];
   bool _isUploading = false;
@@ -291,7 +292,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
 
   Future<void> _pickAndUploadImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera);
+    final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
     if (pickedFile == null) return;
 
     setState(() => _isUploading = true);
@@ -309,7 +310,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e'), backgroundColor: errorColor),
+          SnackBar(content: Text('Upload note: $e'), backgroundColor: errorColor),
         );
       }
     } finally {
@@ -399,11 +400,17 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
             .insert(updatePayload);
       }
 
+      await AuthService().logAuditAction(
+        actionType: 'COMMERCIAL_INSPECTION_SUBMITTED',
+        targetEntity: _model.businessName.isNotEmpty ? _model.businessName : 'Commercial Establishment',
+        details: 'Submitted BFP Form 061 Commercial Fire Safety Checklist (IO: ${_model.ioNumber}, Action: ${_model.recommendationAction ?? 'Inspected'}).',
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('BFP Commercial Fire Safety Checklist Submitted Successfully!'),
-            backgroundColor: Color(0xFF10B981),
+            backgroundColor: Color(0xFF16A34A),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -425,40 +432,46 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('I. Reference & Inspection Nature'),
+        _buildSectionHeader('I. Reference & Inspection Nature', Icons.assignment_outlined),
         _buildReferenceSection(),
-        _buildSectionHeader('IV. General Information'),
+        _buildSectionHeader('IV. General Information', Icons.storefront_outlined),
         _buildGeneralInfoSection(),
-        _buildSectionHeader('Building Specifications & Classification'),
+        _buildSectionHeader('Building Specifications & Classification', Icons.architecture_outlined),
         _buildBuildingSpecificationsSection(),
-        _buildSectionHeader('V. Means of Egress'),
+        _buildSectionHeader('V. Means of Egress', Icons.exit_to_app_outlined),
         _buildMeansOfEgressSection(),
-        _buildSectionHeader('VI. Signs, Lighting & Exits Signage'),
+        _buildSectionHeader('VI. Signs, Lighting & Exits Signage', Icons.signpost_outlined),
         _buildSignsAndSignageSection(),
-        _buildSectionHeader('VII. Hazard Identification'),
+        _buildSectionHeader('VII. Hazard Identification', Icons.warning_amber_outlined),
         _buildHazardSection(),
-        _buildSectionHeader('VIII. Fire Protection Systems'),
+        _buildSectionHeader('VIII. Fire Protection Systems', Icons.fire_extinguisher_outlined),
         _buildFireProtectionSection(),
-        _buildSectionHeader('IX. Defects, Recommendations & Signatures'),
+        _buildSectionHeader('IX. Defects, Recommendations & Signatures', Icons.fact_check_outlined),
         _buildDefectsAndRecommendationsSection(),
-        _buildSectionHeader('Photo Documentation'),
+        _buildSectionHeader('Photo Documentation', Icons.photo_camera_outlined),
         _buildPhotoDocumentationSection(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _buildSubmitButton(),
       ],
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, [IconData? icon]) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title.toUpperCase(),
-          style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 18, color: primaryColor),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+          ),
+        ],
       ),
     );
   }
@@ -483,42 +496,64 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTextField('Inspection Order No. (IO)', controller: _ioNumberCtrl, hint: 'e.g. IO-2026-001'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(child: _buildTextField('Date Issued', controller: _dateIssuedCtrl, hint: 'YYYY-MM-DD')),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Inspected', controller: _dateInspectedCtrl, hint: 'YYYY-MM-DD')),
             ],
           ),
-          const SizedBox(height: 16),
-          Text('Nature of Inspection Conducted:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 18),
+          Text('Nature of Inspection Conducted:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
           const SizedBox(height: 8),
           ...natures.map((n) {
-            return RadioListTile<String>(
-              title: Text(n, style: const TextStyle(fontSize: 13)),
-              value: n,
-              groupValue: _model.inspectionNature,
-              activeColor: primaryColor,
-              onChanged: (val) => setState(() => _model.inspectionNature = val),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
+            final isSel = _model.inspectionNature == n;
+            return InkWell(
+              onTap: () => setState(() => _model.inspectionNature = n),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                      size: 18,
+                      color: isSel ? primaryColor : subtitleColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        n,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                          color: titleColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           }),
 
           if (_model.inspectionNature == 'Verification Inspection for Compliance') ...[
-            const SizedBox(height: 8),
-            Text('Verification Sub-type:', style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
+            Text('Verification Sub-type:', style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: verificationTypes.map((vt) {
                 final isSel = _model.verificationType == vt;
                 return ChoiceChip(
                   label: Text(vt, style: const TextStyle(fontSize: 12)),
                   selected: isSel,
                   selectedColor: primaryColor,
-                  labelStyle: TextStyle(color: isSel ? Colors.white : titleColor),
+                  backgroundColor: inputBgColor,
+                  side: BorderSide(color: isSel ? primaryColor : borderColor),
+                  labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
                   onSelected: (val) => setState(() => _model.verificationType = val ? vt : null),
                 );
               }).toList(),
@@ -526,15 +561,15 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
           ],
 
           if (_model.inspectionNature == 'Others') ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _buildTextField('Specify Other Nature', controller: _natureOthersCtrl),
           ],
 
-          const SizedBox(height: 16),
-          Text('III. Requirements:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
+          Text('III. Requirements:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 10),
           _buildYesNoToggleRow('FSCCR Report (Occupancy)', _model.fsccrRequired, (v) => setState(() => _model.fsccrRequired = v)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _buildYesNoToggleRow('FSMR Report (New / Renewal / Annual)', _model.fsmrRequired, (v) => setState(() => _model.fsmrRequired = v)),
         ],
       ),
@@ -549,71 +584,71 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       child: Column(
         children: [
           _buildTextField('Name of Building', controller: _buildingNameCtrl),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildTextField('Address', controller: _addressCtrl),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildTextField('Business Name', controller: _businessNameCtrl),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildTextField('Nature of Business', controller: _natureOfBusinessCtrl),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildTextField('Name of Owner / Representative', controller: _ownerRepresentativeCtrl),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _buildTextField('Contact No.', controller: _contactNoCtrl, isNum: true),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text('FSIC for Occupancy Permits:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
+            child: Text('FSIC for Occupancy Permits:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('FSEC No.', controller: _fsecNoCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _fsecDateCtrl)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _buildTextField('Building Permit No.', controller: _buildingPermitNoCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _buildingPermitDateCtrl)),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text('FSIC for Business Permit (New/Renewal):', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
+            child: Text('FSIC for Business Permit (New/Renewal):', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('FSIC No. (Latest)', controller: _fsicNoLatestCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _fsicDateCtrl)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _buildTextField('Cert. of Fire Drill', controller: _fireDrillCertCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _fireDrillDateCtrl)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _buildTextField('Business Permit No.', controller: _businessPermitNoCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _businessPermitDateCtrl)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _buildTextField('Fire Insurance Policy', controller: _fireInsurancePolicyNoCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Date Issued', controller: _fireInsuranceDateCtrl)),
             ],
           ),
@@ -655,112 +690,142 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Construction Type:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
-          ...constructionTypes.map((ct) => RadioListTile<String>(
-            title: Text(ct, style: const TextStyle(fontSize: 12)),
-            value: ct,
-            groupValue: _model.constructionType,
-            activeColor: primaryColor,
-            onChanged: (val) => setState(() => _model.constructionType = val),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          )),
-          const SizedBox(height: 12),
-          Text('Walls / Ceiling Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          Text('Construction Type:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
+          ...constructionTypes.map((ct) {
+            final isSel = _model.constructionType == ct;
+            return InkWell(
+              onTap: () => setState(() => _model.constructionType = ct),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                      size: 18,
+                      color: isSel ? primaryColor : subtitleColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        ct,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: titleColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 16),
+          Text('Walls / Ceiling Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: wallFinishes.map((wf) {
               final isSel = _model.interiorFinishWalls == wf;
               return ChoiceChip(
-                label: Text(wf.split(':')[0], style: const TextStyle(fontSize: 11)),
+                label: Text(wf.split(':')[0], style: const TextStyle(fontSize: 12)),
                 selected: isSel,
                 selectedColor: primaryColor,
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor),
+                backgroundColor: inputBgColor,
+                side: BorderSide(color: isSel ? primaryColor : borderColor),
+                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
                 onSelected: (val) => setState(() => _model.interiorFinishWalls = val ? wf : null),
               );
             }).toList(),
           ),
-          const SizedBox(height: 12),
-          Text('Floor Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          const SizedBox(height: 16),
+          Text('Floor Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: floorFinishes.map((ff) {
               final isSel = _model.interiorFinishFloor == ff;
               return ChoiceChip(
-                label: Text(ff.split(':')[0], style: const TextStyle(fontSize: 11)),
+                label: Text(ff.split(':')[0], style: const TextStyle(fontSize: 12)),
                 selected: isSel,
                 selectedColor: primaryColor,
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor),
+                backgroundColor: inputBgColor,
+                side: BorderSide(color: isSel ? primaryColor : borderColor),
+                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
                 onSelected: (val) => setState(() => _model.interiorFinishFloor = val ? ff : null),
               );
             }).toList(),
           ),
-          const SizedBox(height: 16),
-          Text('General Occupancy Classification:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 6),
+          const SizedBox(height: 20),
+          Text('General Occupancy Classification:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: occupancies.map((occ) {
               final isSel = _model.occupancyClassification == occ;
               return ChoiceChip(
-                label: Text(occ, style: const TextStyle(fontSize: 11)),
+                label: Text(occ, style: const TextStyle(fontSize: 12)),
                 selected: isSel,
                 selectedColor: primaryColor,
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor),
+                backgroundColor: inputBgColor,
+                side: BorderSide(color: isSel ? primaryColor : borderColor),
+                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
                 onSelected: (val) => setState(() => _model.occupancyClassification = val ? occ : null),
               );
             }).toList(),
           ),
-          const SizedBox(height: 16),
-          Text('Sectional Occupancy Usage:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
+          Text('Sectional Occupancy Usage:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('Basement', controller: _basementCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Ground Floor', controller: _groundFloorCtrl)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('Second Floor', controller: _secondFloorCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Third Floor', controller: _thirdFloorCtrl)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('Fourth Floor', controller: _fourthFloorCtrl)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Nth Floor', controller: _nthFloorCtrl)),
             ],
           ),
-          const SizedBox(height: 16),
-          Text('Other Building Information:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
+          Text('Other Building Information:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(child: _buildTextField('Max Occupant Load (P/Floor)', controller: _occupantLoadCtrl, isNum: true)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(child: _buildTextField('Number of Stories', controller: _numberOfStoriesCtrl, isNum: true)),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _buildTextField('Building Height (m)', controller: _buildingHeightCtrl, isNum: true)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Highrise Building?', style: TextStyle(color: subtitleColor, fontSize: 11, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
+                    Text('Highrise Building?', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
                     _buildYesNoToggleRow('', _model.isHighrise, (v) => setState(() => _model.isHighrise = v)),
                   ],
                 ),
@@ -826,22 +891,27 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         children: [
           _buildAccordion(
             title: 'A. Exit Access Components & Dimensions',
+            icon: Icons.door_front_door_outlined,
             children: exitAccessComponents.map((comp) => _buildItemWithDimensionToggle(comp, _model.egressAccessStatus)).toList(),
           ),
           _buildAccordion(
             title: 'Exit Access Requirements',
+            icon: Icons.fact_check_outlined,
             children: exitAccessRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
           ),
           _buildAccordion(
             title: 'B. Exits Components & Clear Width',
+            icon: Icons.stairs_outlined,
             children: exitComponents.map((comp) => _buildItemWithDimensionToggle(comp, _model.exitComponentsStatus)).toList(),
           ),
           _buildAccordion(
             title: 'Exits Requirements (Stairs & Doors)',
+            icon: Icons.rule_outlined,
             children: exitRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
           ),
           _buildAccordion(
             title: 'C. Exits Discharge Requirements',
+            icon: Icons.directions_run_outlined,
             children: dischargeRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
           ),
         ],
@@ -880,14 +950,17 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         children: [
           _buildAccordion(
             title: 'A. Marking of Means of Egress (EXIT)',
+            icon: Icons.signpost_outlined,
             children: egressMarkings.map((m) => _buildPassFailToggle(m, m, _model.exitSignageStatus)).toList(),
           ),
           _buildAccordion(
             title: 'B. Emergency Evacuation Plan',
+            icon: Icons.map_outlined,
             children: planChecklist.map((item) => _buildPassFailToggle(item, item, _model.exitSignageStatus)).toList(),
           ),
           _buildAccordion(
             title: 'C. Illumination of Means of Egress',
+            icon: Icons.lightbulb_outlined,
             children: illuminationChecklist.map((item) => _buildPassFailToggle(item, item, _model.exitSignageStatus)).toList(),
           ),
         ],
@@ -919,14 +992,17 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         children: [
           _buildAccordion(
             title: 'A. Other Flammable Liquids (Alcohol, Ether, etc.)',
+            icon: Icons.science_outlined,
             children: flammableLiquids.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
           ),
           _buildAccordion(
             title: 'B. Miscellaneous Hazards (Equipment/Storage)',
+            icon: Icons.inventory_2_outlined,
             children: miscHazards.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
           ),
           _buildAccordion(
             title: 'C. Housekeeping & Waste Disposal',
+            icon: Icons.cleaning_services_outlined,
             children: housekeeping.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
           ),
         ],
@@ -975,18 +1051,22 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         children: [
           _buildAccordion(
             title: 'A. Automatic Fire Suppression System (Sprinkler)',
+            icon: Icons.water_drop_outlined,
             children: sprinklerItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
           ),
           _buildAccordion(
             title: 'B. Wet Standpipe / Fire Hose Cabinet',
+            icon: Icons.local_fire_department_outlined,
             children: hoseCabinetItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
           ),
           _buildAccordion(
             title: 'C. Fire Pump Infrastructure',
+            icon: Icons.speed_outlined,
             children: firePumpItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
           ),
           _buildAccordion(
             title: 'D-K. Fire Alarms, Extinguishers, Kitchen & Fire Wall',
+            icon: Icons.shield_outlined,
             children: alarmAndExtinguishers.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
           ),
         ],
@@ -1012,27 +1092,46 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTextField('DEFECTS / DEFICIENCIES SUMMARY', controller: _defectsSummaryCtrl, maxLines: 3, hint: 'State defects found in Items IV to VIII'),
-          const SizedBox(height: 16),
-          Text('RECOMMENDATIONS:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 18),
+          Text('RECOMMENDATIONS:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 10),
           ...recommendations.map((rec) {
-            return RadioListTile<String>(
-              title: Text(rec['label']!, style: const TextStyle(fontSize: 13)),
-              value: rec['value']!,
-              groupValue: _model.recommendationAction,
-              activeColor: primaryColor,
-              onChanged: (val) => setState(() => _model.recommendationAction = val),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
+            final isSel = _model.recommendationAction == rec['value'];
+            return InkWell(
+              onTap: () => setState(() => _model.recommendationAction = rec['value']),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                      size: 18,
+                      color: isSel ? primaryColor : subtitleColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        rec['label']!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                          color: titleColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           }),
-          const SizedBox(height: 16),
-          Text('Signatures & Approvals:', style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
+          Text('Signatures & Approvals:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 12),
           _buildTextField('Fire Safety Inspector/s', controller: _inspectorNameCtrl),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _buildTextField('Team Leader', controller: _teamLeaderNameCtrl),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _buildTextField('City / Municipal Fire Marshal', controller: _fireMarshalNameCtrl),
         ],
       ),
@@ -1048,12 +1147,13 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         children: [
           InkWell(
             onTap: _isUploading ? null : _pickAndUploadImage,
+            borderRadius: BorderRadius.circular(10),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.symmetric(vertical: 22),
               decoration: BoxDecoration(
                 color: inputBgColor,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: borderColor),
               ),
               child: Column(
@@ -1061,16 +1161,18 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
                   if (_isUploading)
                     CircularProgressIndicator(color: primaryColor)
                   else ...[
-                    Icon(Icons.camera_alt_outlined, size: 32, color: subtitleColor),
-                    const SizedBox(height: 6),
-                    Text('Tap to capture commercial inspection photos', style: TextStyle(color: subtitleColor, fontSize: 13)),
+                    Icon(Icons.camera_alt_outlined, size: 34, color: primaryColor),
+                    const SizedBox(height: 8),
+                    Text('Tap to capture commercial inspection photos', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text('Attach visual evidence for BFP records', style: TextStyle(color: subtitleColor, fontSize: 11)),
                   ],
                 ],
               ),
             ),
           ),
           if (_photoUrls.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -1084,6 +1186,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
                 return Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
                     image: DecorationImage(
                       image: NetworkImage(_photoUrls[index]),
                       fit: BoxFit.cover,
@@ -1103,30 +1206,37 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: SizedBox(
         width: double.infinity,
-        height: 54,
-        child: ElevatedButton(
+        height: 52,
+        child: ElevatedButton.icon(
           onPressed: _isSubmitting ? null : _submitReport,
+          icon: _isSubmitting
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Icon(Icons.send_outlined, size: 20, color: Colors.white),
+          label: Text(
+            _isSubmitting ? 'SUBMITTING CHECKLIST...' : 'SUBMIT COMMERCIAL BFP CHECKLIST',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: primaryColor,
+            elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: _isSubmitting
-              ? const CircularProgressIndicator(color: Colors.white)
-              : const Text('SUBMIT COMMERCIAL BFP CHECKLIST', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
         ),
       ),
     );
   }
 
-  Widget _buildAccordion({required String title, required List<Widget> children}) {
+  Widget _buildAccordion({required String title, required List<Widget> children, IconData? icon}) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: _cardDecoration(),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          title: Text(title, style: TextStyle(color: titleColor, fontWeight: FontWeight.w600, fontSize: 13)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: icon != null ? Icon(icon, size: 20, color: primaryColor) : null,
+          title: Text(title, style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           children: children,
         ),
       ),
@@ -1137,53 +1247,76 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     final currentStatus = statusMap[label];
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
+          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
           Row(
             children: [
               SizedBox(
-                width: 100,
+                width: 110,
                 child: TextFormField(
                   onChanged: (val) => _model.itemDimensions[label] = val,
                   keyboardType: TextInputType.number,
+                  style: TextStyle(fontSize: 12, color: titleColor, fontWeight: FontWeight.bold),
                   decoration: InputDecoration(
                     hintText: 'Dim (m)',
-                    hintStyle: TextStyle(color: subtitleColor.withOpacity(0.4), fontSize: 11),
+                    hintStyle: TextStyle(color: subtitleColor.withOpacity(0.5), fontSize: 11),
                     filled: true,
                     fillColor: inputBgColor,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: primaryColor, width: 1.5)),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Row(
                   children: ['Passed', 'Failed', 'N/A'].map((opt) {
                     final isSel = currentStatus == opt;
-                    Color c = subtitleColor;
-                    if (opt == 'Passed') c = successColor;
-                    if (opt == 'Failed') c = errorColor;
+                    Color bg = const Color(0xFFF1F5F9);
+                    Color borderC = borderColor;
+                    Color textC = subtitleColor;
+                    IconData iconData = Icons.do_not_disturb_on_outlined;
+
+                    if (opt == 'Passed') {
+                      bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
+                      borderC = isSel ? successColor : borderColor;
+                      textC = isSel ? const Color(0xFF15803D) : subtitleColor;
+                      iconData = Icons.check_circle_outlined;
+                    } else if (opt == 'Failed') {
+                      bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
+                      borderC = isSel ? errorColor : borderColor;
+                      textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
+                      iconData = Icons.cancel_outlined;
+                    }
 
                     return Expanded(
                       child: GestureDetector(
                         onTap: () => setState(() => statusMap[label] = opt),
                         child: Container(
-                          margin: const EdgeInsets.only(right: 4),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(vertical: 9),
                           decoration: BoxDecoration(
-                            color: isSel ? c.withOpacity(0.15) : surfaceColor,
-                            border: Border.all(color: isSel ? c : borderColor),
-                            borderRadius: BorderRadius.circular(6),
+                            color: bg,
+                            border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
-                            opt,
-                            style: TextStyle(color: isSel ? c : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 11),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(iconData, size: 13, color: textC),
+                              const SizedBox(width: 4),
+                              Text(
+                                opt,
+                                style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1200,35 +1333,56 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
 
   Widget _buildPassFailToggle(String label, String key, Map<String, String> map) {
     final current = map[key];
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
+          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
           Row(
             children: ['Passed', 'Failed', 'N/A'].map((opt) {
               final isSel = current == opt;
-              Color c = subtitleColor;
-              if (opt == 'Passed') c = successColor;
-              if (opt == 'Failed') c = errorColor;
+              Color bg = const Color(0xFFF1F5F9);
+              Color borderC = borderColor;
+              Color textC = subtitleColor;
+              IconData iconData = Icons.do_not_disturb_on_outlined;
+
+              if (opt == 'Passed') {
+                bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
+                borderC = isSel ? successColor : borderColor;
+                textC = isSel ? const Color(0xFF15803D) : subtitleColor;
+                iconData = Icons.check_circle_outlined;
+              } else if (opt == 'Failed') {
+                bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
+                borderC = isSel ? errorColor : borderColor;
+                textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
+                iconData = Icons.cancel_outlined;
+              }
 
               return Expanded(
                 child: GestureDetector(
                   onTap: () => setState(() => map[key] = opt),
                   child: Container(
                     margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
                     decoration: BoxDecoration(
-                      color: isSel ? c.withOpacity(0.15) : surfaceColor,
-                      border: Border.all(color: isSel ? c : borderColor),
-                      borderRadius: BorderRadius.circular(6),
+                      color: bg,
+                      border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      opt,
-                      style: TextStyle(color: isSel ? c : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 11),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(iconData, size: 13, color: textC),
+                        const SizedBox(width: 4),
+                        Text(
+                          opt,
+                          style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1245,27 +1399,37 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         if (label.isNotEmpty)
-          Expanded(child: Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.w500))),
+          Expanded(child: Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.w600))),
         Row(
           children: ['Yes', 'No', 'N/A'].map((opt) {
             final isSel = currentVal == opt;
-            Color c = subtitleColor;
-            if (opt == 'Yes') c = successColor;
-            if (opt == 'No') c = errorColor;
+            Color bg = const Color(0xFFF1F5F9);
+            Color borderC = borderColor;
+            Color textC = subtitleColor;
+
+            if (opt == 'Yes') {
+              bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
+              borderC = isSel ? successColor : borderColor;
+              textC = isSel ? const Color(0xFF15803D) : subtitleColor;
+            } else if (opt == 'No') {
+              bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
+              borderC = isSel ? errorColor : borderColor;
+              textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
+            }
 
             return GestureDetector(
               onTap: () => onChanged(opt),
               child: Container(
                 margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
-                  color: isSel ? c.withOpacity(0.15) : surfaceColor,
-                  border: Border.all(color: isSel ? c : borderColor),
-                  borderRadius: BorderRadius.circular(6),
+                  color: bg,
+                  border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   opt,
-                  style: TextStyle(color: isSel ? c : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 11),
+                  style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 12),
                 ),
               ),
             );
@@ -1279,19 +1443,22 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: subtitleColor, fontSize: 11, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
         TextFormField(
           controller: controller,
           maxLines: maxLines,
           keyboardType: isNum ? TextInputType.number : TextInputType.text,
+          style: TextStyle(fontSize: 13, color: titleColor),
           decoration: InputDecoration(
             hintText: hint ?? 'Enter $label',
-            hintStyle: TextStyle(color: subtitleColor.withOpacity(0.4), fontSize: 12),
+            hintStyle: TextStyle(color: subtitleColor.withOpacity(0.5), fontSize: 12),
             filled: true,
             fillColor: inputBgColor,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: primaryColor, width: 1.5)),
           ),
         ),
       ],
@@ -1301,8 +1468,15 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
       color: surfaceColor,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       border: Border.all(color: borderColor, width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.02),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
     );
   }
 }

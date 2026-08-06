@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'main_navigation_screen.dart';
+import 'models/user_role.dart';
+import 'services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,44 +39,21 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await Supabase.instance.client.auth.signInWithPassword(
+      final role = await AuthService().signIn(
         email: email,
         password: password,
       );
 
-      final user = response.user;
-      if (user != null) {
-        // Fetch user profile
-        final profileData = await Supabase.instance.client
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        if (profileData != null && profileData['role'] == 'inspector') {
-          // Navigate to Task Dashboard
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    const MainNavigationScreen(isPublicUser: false),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                transitionDuration: const Duration(milliseconds: 500),
-              ),
-            );
-          }
-        } else {
-          // Clear session and show error
-          await Supabase.instance.client.auth.signOut();
-          _showToast('Access Denied: BFP Inspector privileges required.');
-        }
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed(
+          role.defaultRoute,
+          arguments: role,
+        );
       }
     } on AuthException catch (e) {
       _showToast(e.message);
     } catch (e) {
-      _showToast('An unexpected error occurred during sign in.');
+      _showToast('An unexpected error occurred during sign in: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -86,16 +64,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _navigateToGuestMode() {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const MainNavigationScreen(isPublicUser: true),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 500),
-      ),
-    );
+    AuthService().setGuestMode();
+    Navigator.of(context).pushReplacementNamed(UserRole.publicGuest.defaultRoute);
   }
 
   void _showToast(String message) {
@@ -422,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                       ),
                                                     )
                                                   : const Text(
-                                                      'SIGN IN AS BFP OFFICER',
+                                                      'SIGN IN',
                                                       style: TextStyle(
                                                         fontSize: 14,
                                                         fontWeight: FontWeight.bold,

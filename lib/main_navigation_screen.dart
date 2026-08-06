@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'home_screen.dart';
-import 'schedule_screen.dart';
-import 'new_inspection_screen.dart';
+import 'models/user_role.dart';
+import 'services/auth_service.dart';
+import 'services/route_guard.dart';
 import 'fire_risk_mapping_screen.dart';
-import 'reports_screen.dart';
 import 'report_emergency_screen.dart';
-import 'login_screen.dart';
+import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/admin/user_management_screen.dart';
+import 'screens/admin/admin_reports_screen.dart';
+import 'screens/admin/audit_logs_screen.dart';
+import 'screens/risk_officer/risk_officer_dashboard_screen.dart';
+import 'screens/risk_officer/olp_hub_screen.dart';
+import 'screens/risk_officer/barangay_risk_map_screen.dart';
+import 'screens/risk_officer/risk_reports_screen.dart';
+import 'screens/fire_inspector/fire_inspector_dashboard_screen.dart';
+import 'screens/fire_inspector/inspection_hub_screen.dart';
+import 'screens/fire_inspector/establishment_directory_screen.dart';
+import 'screens/fire_inspector/inspector_reports_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
+  final UserRole activeRole;
   final bool isPublicUser;
 
   const MainNavigationScreen({
     super.key,
+    this.activeRole = UserRole.fireInspector,
     this.isPublicUser = false,
   });
 
@@ -22,115 +33,212 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
-  String _inspectorName = 'FO1 Field Officer';
-  String _stationBadge = 'BFP Station 4';
+  String _inspectorName = 'BFP Officer';
+  String _stationBadge = 'BFP Lingayen';
 
+  late final UserRole _effectiveRole;
   late final List<Widget> _screens;
   late final List<NavigationDestination> _navigationDestinations;
 
   @override
   void initState() {
     super.initState();
-    if (widget.isPublicUser) {
-      _inspectorName = 'Citizen Guest';
-      _stationBadge = 'Public Access Mode';
-      _screens = [
-        const FireRiskMappingScreen(isPublicUser: true),
-        const ReportEmergencyScreen(),
-      ];
-      _navigationDestinations = const [
-        NavigationDestination(
-          icon: Icon(Icons.map_outlined),
-          selectedIcon: Icon(Icons.map_rounded),
-          label: 'GIS Risk Map',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.emergency_outlined),
-          selectedIcon: Icon(Icons.emergency_rounded),
-          label: 'Report Emergency',
-        ),
-      ];
-    } else {
-      _fetchInspectorProfile();
-      _screens = [
-        const HomeScreen(),
-        const ScheduleScreen(),
-        const NewInspectionScreen(),
-        const FireRiskMappingScreen(isPublicUser: false),
-        const ReportsScreen(),
-      ];
-      _navigationDestinations = const [
-        NavigationDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(Icons.dashboard_rounded),
-          label: 'Dashboard',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.calendar_month_outlined),
-          selectedIcon: Icon(Icons.calendar_month_rounded),
-          label: 'Schedule',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.assignment_turned_in_outlined),
-          selectedIcon: Icon(Icons.assignment_turned_in),
-          label: 'Inspection',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.fact_check_outlined),
-          selectedIcon: Icon(Icons.fact_check_rounded),
-          label: 'Risk Mapping',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.description_outlined),
-          selectedIcon: Icon(Icons.description_rounded),
-          label: 'Reports',
-        ),
-      ];
+    _effectiveRole = widget.isPublicUser ? UserRole.publicGuest : widget.activeRole;
+    _setupRoleNavigation();
+    _fetchUserProfile();
+  }
+
+  void _setupRoleNavigation() {
+    switch (_effectiveRole) {
+      case UserRole.fireInspector:
+        _inspectorName = 'Fire Inspector';
+        _stationBadge = 'BFP-9531';
+        _screens = [
+          FireInspectorDashboardScreen(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+          const InteractiveRiskMapWidget(isPublicUser: false),
+          const InspectionHubScreen(),
+          const EstablishmentDirectoryScreen(),
+          const InspectorReportsScreen(),
+        ];
+        _navigationDestinations = const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map_rounded),
+            label: 'Risk Map',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.fact_check_outlined),
+            selectedIcon: Icon(Icons.fact_check_rounded),
+            label: 'Inspection',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront_rounded),
+            label: 'Establishment',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_turned_in_outlined),
+            selectedIcon: Icon(Icons.assignment_turned_in_rounded),
+            label: 'Reports',
+          ),
+        ];
+        break;
+
+      case UserRole.communityRiskOfficer:
+        _inspectorName = 'Community Risk Officer';
+        _stationBadge = 'BFP-5153';
+        _screens = [
+          CommunityRiskOfficerDashboard(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+          const InteractiveRiskMapWidget(isPublicUser: false),
+          OlpHubScreen(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+          BarangayRiskMapScreen(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+          const RiskReportsScreen(),
+        ];
+        _navigationDestinations = const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map_rounded),
+            label: 'Risk Map',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.shield_outlined),
+            selectedIcon: Icon(Icons.shield_rounded),
+            label: 'OLP',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.folder_shared_outlined),
+            selectedIcon: Icon(Icons.folder_shared_rounded),
+            label: 'Risk Directory',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics_rounded),
+            label: 'OLP Analytics',
+          ),
+        ];
+        break;
+
+      case UserRole.stationOfficer:
+        _inspectorName = 'Station Officer';
+        _stationBadge = 'BFP-2188';
+        _screens = [
+          StationOfficerDashboard(onSelectTab: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          }),
+          const UserManagementScreen(),
+          const AdminReportsScreen(),
+          const AuditLogsScreen(),
+        ];
+        _navigationDestinations = const [
+          NavigationDestination(
+            icon: Icon(Icons.admin_panel_settings_outlined),
+            selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+            label: 'Command Hub',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Personnel',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics_rounded),
+            label: 'Analytics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_edu_outlined),
+            selectedIcon: Icon(Icons.history_edu_rounded),
+            label: 'Audit Logs',
+          ),
+        ];
+        break;
+
+      case UserRole.publicGuest:
+        _inspectorName = 'Citizen Guest';
+        _stationBadge = 'Public Access Mode';
+        _screens = const [
+          FireRiskMappingScreen(isPublicUser: true),
+          ReportEmergencyScreen(),
+        ];
+        _navigationDestinations = const [
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map_rounded),
+            label: 'GIS Risk Map',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.emergency_outlined),
+            selectedIcon: Icon(Icons.emergency_rounded),
+            label: 'Report Emergency',
+          ),
+        ];
+        break;
     }
   }
 
-  Future<void> _fetchInspectorProfile() async {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+  Future<void> _fetchUserProfile() async {
+    if (_effectiveRole == UserRole.publicGuest) return;
 
-      final profileData = await Supabase.instance.client
-          .from('profiles')
-          .select('full_name, badge_number, role')
-          .eq('id', user.id)
-          .maybeSingle();
+    final authService = AuthService();
+    await authService.refreshUserProfile();
+    final profile = authService.userProfile;
 
-      if (profileData != null && mounted) {
-        final String fullName = profileData['full_name']?.toString() ?? user.email?.split('@').first ?? 'BFP Officer';
-        final String? badgeNo = profileData['badge_number']?.toString();
-        final String role = (profileData['role']?.toString() ?? 'inspector').toUpperCase();
+    if (profile != null && mounted) {
+      final String? name = profile['full_name']?.toString();
+      final String? badge = profile['badge_number']?.toString();
 
-        setState(() {
-          _inspectorName = fullName;
-          if (badgeNo != null && badgeNo.isNotEmpty) {
-            _stationBadge = badgeNo.toLowerCase().startsWith('bfp') ? badgeNo : 'BFP $badgeNo';
-          } else {
-            _stationBadge = 'BFP $role';
-          }
-        });
-      } else if (user.email != null && mounted) {
-        setState(() {
-          _inspectorName = user.email!.split('@').first;
-          _stationBadge = 'BFP INSPECTOR';
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching inspector profile: $e');
+      setState(() {
+        if (name != null && name.trim().isNotEmpty) {
+          _inspectorName = name.trim();
+        }
+        if (badge != null && badge.trim().isNotEmpty) {
+          _stationBadge = badge.trim();
+        }
+      });
     }
   }
 
   void _signOut() async {
-    if (!widget.isPublicUser) {
-      await Supabase.instance.client.auth.signOut();
-    }
+    await AuthService().signOut();
     if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        RouteGuard.routeLogin,
         (route) => false,
       );
     }
@@ -138,7 +246,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isGuest = widget.isPublicUser;
+    final bool isGuest = _effectiveRole == UserRole.publicGuest;
 
     return Scaffold(
       appBar: AppBar(
@@ -178,18 +286,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      Icon(
-                        isGuest ? Icons.public_rounded : Icons.shield_outlined,
-                        size: 12,
-                        color: isGuest ? const Color(0xFFDC2626) : const Color(0xFFD84315),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _stationBadge,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isGuest ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isGuest ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isGuest ? Icons.public_rounded : Icons.shield_outlined,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _stationBadge,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -204,7 +324,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             TextButton.icon(
               onPressed: _signOut,
               icon: const Icon(Icons.login_rounded, size: 18, color: Color(0xFFD84315)),
-              label: const Text('BFP Login', style: TextStyle(color: Color(0xFFD84315), fontWeight: FontWeight.bold, fontSize: 13)),
+              label: const Text(
+                'BFP Login',
+                style: TextStyle(color: Color(0xFFD84315), fontWeight: FontWeight.bold, fontSize: 13),
+              ),
             )
           else
             IconButton(

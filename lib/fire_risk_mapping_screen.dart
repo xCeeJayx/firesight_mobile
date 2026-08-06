@@ -9,10 +9,12 @@ import 'services/supabase_service.dart';
 
 class FireRiskMappingScreen extends StatefulWidget {
   final bool isPublicUser;
+  final int initialTab;
 
   const FireRiskMappingScreen({
     super.key,
     this.isPublicUser = false,
+    this.initialTab = 0,
   });
 
   @override
@@ -20,7 +22,13 @@ class FireRiskMappingScreen extends StatefulWidget {
 }
 
 class _FireRiskMappingScreenState extends State<FireRiskMappingScreen> {
-  int _selectedTabIndex = 0; // 0 = Interactive Map, 1 = Urban Risk, 2 = House Check
+  late int _selectedTabIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTabIndex = widget.initialTab;
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -450,18 +450,22 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  ioNo,
-                  style: const TextStyle(
-                    color: Color(0xFF475569),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    ioNo,
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

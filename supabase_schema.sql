@@ -78,26 +78,61 @@ DROP POLICY IF EXISTS "Inspectors can view their own inspections" ON public.insp
 DROP POLICY IF EXISTS "Inspectors can insert their own inspections" ON public.inspections;
 DROP POLICY IF EXISTS "Inspectors can update their own inspections" ON public.inspections;
 DROP POLICY IF EXISTS "Inspectors can delete their own inspections" ON public.inspections;
+DROP POLICY IF EXISTS "FSIC Officers and Station Officers can manage inspections" ON public.inspections;
 
--- Allow logged-in inspectors to view their inspections
-CREATE POLICY "Inspectors can view their own inspections" 
-ON public.inspections FOR SELECT 
-USING (auth.uid() = inspector_id);
+-- Allow station_officer and fire_inspector to view/manage inspections
+CREATE POLICY "FSIC Officers and Station Officers can manage inspections" 
+ON public.inspections FOR ALL 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('station_officer', 'fire_inspector')
+  )
+);
 
--- Allow logged-in inspectors to insert new inspection records
-CREATE POLICY "Inspectors can insert their own inspections" 
-ON public.inspections FOR INSERT 
-WITH CHECK (auth.uid() = inspector_id);
+-- ============================================================================
+-- PROFILES TABLE & ROLE-BASED ACCESS CONTROL (RBAC) SCHEMA
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'fire_inspector' CHECK (role IN ('station_officer', 'fire_inspector', 'community_risk_officer', 'public_guest')),
+    full_name VARCHAR(255),
+    badge_number VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Allow logged-in inspectors to update their inspection records
-CREATE POLICY "Inspectors can update their own inspections" 
-ON public.inspections FOR UPDATE 
-USING (auth.uid() = inspector_id);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Allow logged-in inspectors to delete their inspection records
-CREATE POLICY "Inspectors can delete their own inspections" 
-ON public.inspections FOR DELETE 
-USING (auth.uid() = inspector_id);
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Station Officers can manage profiles" ON public.profiles;
+CREATE POLICY "Station Officers can manage profiles" ON public.profiles FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'station_officer'
+  )
+);
+
+-- Establishments RLS Policies
+ALTER TABLE IF EXISTS public.establishments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "FSIC Officers can manage establishments" ON public.establishments;
+CREATE POLICY "FSIC Officers can manage establishments" ON public.establishments FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('station_officer', 'fire_inspector')
+  )
+);
+
+-- OLP Risk Surveys RLS Policies & Column Migrations
+ALTER TABLE IF EXISTS public.fire_risk_surveys ADD COLUMN IF NOT EXISTS acknowledged_by VARCHAR(255);
+ALTER TABLE IF EXISTS public.fire_risk_surveys ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "OLP Officers can manage risk surveys" ON public.fire_risk_surveys;
+CREATE POLICY "OLP Officers can manage risk surveys" ON public.fire_risk_surveys FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('station_officer', 'community_risk_officer')
+  )
+);
 
 -- Step 6: Create Storage Bucket for Hazard Photos
 INSERT INTO storage.buckets (id, name, public) 
@@ -165,4 +200,42 @@ CREATE POLICY "Allow public to view hydrants" ON public.hydrants FOR SELECT USIN
 ALTER TABLE IF EXISTS public.evacuation_centers ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public to view evacuation_centers" ON public.evacuation_centers;
 CREATE POLICY "Allow public to view evacuation_centers" ON public.evacuation_centers FOR SELECT USING (true);
+
+-- ============================================================================
+-- AUDIT LOGS TABLE & PROFILES IS_ACTIVE MIGRATION
+-- ============================================================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    performer_name VARCHAR(255),
+    performer_role VARCHAR(100),
+    action_type VARCHAR(100) NOT NULL,
+    target_entity VARCHAR(255),
+    details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON public.audit_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON public.audit_logs(actor_id);
+
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Station Officers can view audit logs" ON public.audit_logs;
+CREATE POLICY "Station Officers can view audit logs"
+ON public.audit_logs FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid() AND role = 'station_officer'
+    )
+);
+
+DROP POLICY IF EXISTS "Authenticated users can insert audit logs" ON public.audit_logs;
+CREATE POLICY "Authenticated users can insert audit logs"
+ON public.audit_logs FOR INSERT
+WITH CHECK (auth.role() = 'authenticated');
+
 
