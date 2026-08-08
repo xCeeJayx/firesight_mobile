@@ -13,20 +13,37 @@ class RouteGuard {
 
   /// Check whether a role is permitted to navigate to a target route
   static bool canAccessRoute(UserRole role, String route) {
-    if (route == '/' || route == routeLogin) return true;
+    final r = route.toLowerCase().trim();
+    if (r == '/' || r == routeLogin || r.isEmpty) return true;
 
-    switch (route) {
-      case routeInspectorDashboard:
-        return role == UserRole.stationOfficer || role == UserRole.fireInspector;
-      case routeRiskMappingDashboard:
-        return role == UserRole.stationOfficer || role == UserRole.communityRiskOfficer;
-      case routeAdminDashboard:
-        return role == UserRole.stationOfficer;
-      case routePublicMap:
-        return true; // Everyone can view the public map
-      default:
-        return false;
+    // Station Officer Admin has unrestricted access to all modules
+    if (role == UserRole.stationOfficer) return true;
+
+    // Fire Inspector
+    if (role == UserRole.fireInspector) {
+      if (r.contains('inspector') || r.contains('public') || r.contains('login') || r == '/') {
+        return true;
+      }
+      return false;
     }
+
+    // Community Risk Officer
+    if (role == UserRole.communityRiskOfficer) {
+      if (r.contains('risk') || r.contains('olp') || r.contains('mapping') || r.contains('public') || r.contains('login') || r == '/') {
+        return true;
+      }
+      return false;
+    }
+
+    // Public Citizen Guest
+    if (role == UserRole.publicGuest) {
+      if (r.contains('public') || r == '/' || r == routeLogin) {
+        return true;
+      }
+      return false;
+    }
+
+    return false;
   }
 
   /// Get the appropriate landing route for a role
@@ -36,14 +53,14 @@ class RouteGuard {
 
   /// Returns user-friendly explanation when access is denied
   static String getAccessDeniedMessage(UserRole role, String targetRoute) {
-    if (role == UserRole.fireInspector && targetRoute.contains('risk-mapping')) {
+    if (role == UserRole.fireInspector && (targetRoute.contains('risk') || targetRoute.contains('olp'))) {
       return 'Access Denied: FSIC Fire Inspectors are restricted from accessing OLP Community Risk Mapping.';
     } else if (role == UserRole.communityRiskOfficer && targetRoute.contains('inspector')) {
       return 'Access Denied: OLP Community Risk Officers are restricted from accessing FSIC Inspections.';
     } else if (role == UserRole.publicGuest) {
       return 'Access Denied: Please sign in with an official BFP account to access staff modules.';
     } else {
-      return 'Access Denied: You do not have permission to view this route.';
+      return 'Access Denied: You do not have permission to view this module.';
     }
   }
 
@@ -69,6 +86,18 @@ class RouteGuard {
       effectiveRole = AuthService().currentRole;
     }
 
+    // If guest attempts to open protected internal routes, redirect cleanly to Login without error toast
+    if (effectiveRole == UserRole.publicGuest && !routeName.contains('public')) {
+      return PageRouteBuilder(
+        settings: const RouteSettings(name: routeLogin),
+        pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      );
+    }
+
+    // Check role permission for requested route
     if (!canAccessRoute(effectiveRole, routeName)) {
       final fallbackRoute = getLandingRoute(effectiveRole);
       final message = getAccessDeniedMessage(effectiveRole, routeName);
@@ -77,20 +106,23 @@ class RouteGuard {
         settings: RouteSettings(name: fallbackRoute),
         pageBuilder: (context, animation, secondaryAnimation) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.shield_outlined, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(message)),
-                  ],
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            if (messenger != null) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.shield_outlined, color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(message)),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFFDC2626),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 4),
                 ),
-                backgroundColor: const Color(0xFFDC2626),
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ),
-            );
+              );
+            }
           });
           return _buildScreenForRoute(fallbackRoute, effectiveRole);
         },
@@ -112,20 +144,19 @@ class RouteGuard {
   }
 
   static Widget _buildScreenForRoute(String routeName, UserRole role) {
-    switch (routeName) {
-      case routeLogin:
-      case '/':
-        return const LoginScreen();
-      case routeInspectorDashboard:
-        return const MainNavigationScreen(activeRole: UserRole.fireInspector);
-      case routeRiskMappingDashboard:
-        return const MainNavigationScreen(activeRole: UserRole.communityRiskOfficer);
-      case routeAdminDashboard:
-        return const MainNavigationScreen(activeRole: UserRole.stationOfficer);
-      case routePublicMap:
-        return const MainNavigationScreen(activeRole: UserRole.publicGuest);
-      default:
-        return const LoginScreen();
+    final r = routeName.toLowerCase().trim();
+    if (r == routeLogin || r == '/') {
+      return const LoginScreen();
+    } else if (r.contains('inspector')) {
+      return const MainNavigationScreen(activeRole: UserRole.fireInspector);
+    } else if (r.contains('risk') || r.contains('olp') || r.contains('mapping')) {
+      return const MainNavigationScreen(activeRole: UserRole.communityRiskOfficer);
+    } else if (r.contains('admin')) {
+      return const MainNavigationScreen(activeRole: UserRole.stationOfficer);
+    } else if (r.contains('public')) {
+      return const MainNavigationScreen(activeRole: UserRole.publicGuest);
+    } else {
+      return MainNavigationScreen(activeRole: role != UserRole.publicGuest ? role : UserRole.fireInspector);
     }
   }
 }

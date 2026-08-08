@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
+import '../../services/offline_sync_service.dart';
 import '../../services/supabase_service.dart';
+import '../../models/user_role.dart';
+import '../../models/house_to_house_checklist_model.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class RiskReportsScreen extends StatefulWidget {
   const RiskReportsScreen({super.key});
@@ -12,61 +19,84 @@ class RiskReportsScreen extends StatefulWidget {
 class _RiskReportsScreenState extends State<RiskReportsScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _allSurveys = [];
-
   String _selectedBarangayFilter = 'All Barangays';
   String _selectedRiskFilter = 'All Risks';
-  DateTimeRange? _selectedDateRange;
 
   int _highRiskCount = 0;
   int _mediumRiskCount = 0;
   int _lowRiskCount = 0;
   int _totalSurveys = 0;
 
+  DateTimeRange? _selectedDateRange;
+
   @override
   void initState() {
     super.initState();
     _fetchRiskSurveys();
+    OfflineSyncService().pendingCountNotifier.addListener(_fetchRiskSurveys);
+  }
+
+  @override
+  void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_fetchRiskSurveys);
+    super.dispose();
   }
 
   Future<void> _fetchRiskSurveys() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
+    List<Map<String, dynamic>> list = [];
+
+    // 1. Read offline pending surveys
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'fire_risk_surveys');
+      list.addAll(offline);
+    } catch (_) {}
+
+    // 2. Fetch remote surveys from Supabase
     try {
       final res = await Supabase.instance.client
           .from('fire_risk_surveys')
           .select()
           .order('created_at', ascending: false);
 
-      final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(res);
-
-      int high = 0;
-      int med = 0;
-      int low = 0;
-
-      for (var item in list) {
-        final r = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString().toLowerCase();
-        if (r.contains('high')) {
-          high++;
-        } else if (r.contains('med')) {
-          med++;
-        } else if (r.contains('low')) {
-          low++;
+      final remote = List<Map<String, dynamic>>.from(res);
+      final Set<String> existingIds = list.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          list.add(r);
         }
       }
+    } catch (e) {
+      debugPrint('Error loading survey analytics: $e');
+    }
 
+    int high = 0;
+    int med = 0;
+    int low = 0;
+
+    for (var item in list) {
+      final r = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString().toLowerCase();
+      if (r.contains('high')) {
+        high++;
+      } else if (r.contains('med')) {
+        med++;
+      } else if (r.contains('low')) {
+        low++;
+      }
+    }
+
+    if (mounted) {
       setState(() {
         _allSurveys = list;
         _totalSurveys = list.length;
         _highRiskCount = high;
         _mediumRiskCount = med;
         _lowRiskCount = low;
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint('Error loading survey analytics: $e');
-      setState(() {
         _isLoading = false;
       });
     }
@@ -323,6 +353,7 @@ class _RiskReportsScreenState extends State<RiskReportsScreen> {
                                 ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? ''
                                 : '';
                             final surveyor = survey['surveyor_name']?.toString() ?? 'Officer';
+                            final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
 
                             return Container(
                               padding: const EdgeInsets.all(14),
@@ -373,17 +404,26 @@ class _RiskReportsScreenState extends State<RiskReportsScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: riskColor.withOpacity(0.12),
+                                      color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: riskColor.withOpacity(0.3)),
+                                      border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
                                     ),
-                                    child: Text(
-                                      risk.toUpperCase(),
-                                      style: TextStyle(
-                                        color: riskColor,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (isOfflinePending) ...[
+                                          const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Text(
+                                          isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
+                                          style: TextStyle(
+                                            color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],

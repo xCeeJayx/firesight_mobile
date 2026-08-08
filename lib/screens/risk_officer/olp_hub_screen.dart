@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/offline_sync_service.dart';
 import 'barangay_risk_survey_screen.dart';
 import 'house_to_house_checklist_screen.dart';
 
@@ -24,27 +25,54 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
   void initState() {
     super.initState();
     _fetchRecentOlps();
+    OfflineSyncService().pendingCountNotifier.addListener(_fetchRecentOlps);
+  }
+
+  @override
+  void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_fetchRecentOlps);
+    super.dispose();
   }
 
   Future<void> _fetchRecentOlps() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
+    List<Map<String, dynamic>> list = [];
+
+    // 1. Read offline pending surveys
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'fire_risk_surveys');
+      list.addAll(offline);
+    } catch (e) {
+      debugPrint('Error reading offline surveys: $e');
+    }
+
+    // 2. Fetch remote surveys from Supabase
     try {
       final res = await Supabase.instance.client
           .from('fire_risk_surveys')
           .select()
           .order('created_at', ascending: false)
-          .limit(10);
+          .limit(15);
 
-      setState(() {
-        _recentOlps = List<Map<String, dynamic>>.from(res);
-        _isLoading = false;
-      });
+      final remote = List<Map<String, dynamic>>.from(res);
+      final Set<String> existingIds = list.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          list.add(r);
+        }
+      }
     } catch (e) {
-      debugPrint('Error loading OLP stream: $e');
+      debugPrint('Error loading OLP stream from network: $e');
+    }
+
+    if (mounted) {
       setState(() {
+        _recentOlps = list;
         _isLoading = false;
       });
     }
@@ -193,44 +221,105 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEA580C).withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.shield_outlined,
-              color: Color(0xFFEA580C),
-              size: 26,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEA580C).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.shield_outlined,
+                  color: Color(0xFFEA580C),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'BFP Lingayen OLP Command Portal',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Conduct barangay vulnerability mapping or household safety checks. All submissions sync live to station analytics.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'BFP Lingayen OLP Command Portal',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
+          ValueListenableBuilder<int>(
+            valueListenable: OfflineSyncService().pendingCountNotifier,
+            builder: (context, pendingCount, _) {
+              if (pendingCount == 0) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Conduct barangay vulnerability mapping or household safety checks. All submissions sync live to station analytics.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF64748B),
-                  ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.sync_problem_rounded, color: Color(0xFFB45309), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '$pendingCount offline survey(s) pending sync to Supabase.',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () async {
+                        final res = await OfflineSyncService().syncNow();
+                        _fetchRecentOlps();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(res['message'] ?? 'Sync triggered.'),
+                              backgroundColor: res['success'] == true ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD97706),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sync_rounded, size: 14, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text('Sync Now', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -382,6 +471,7 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
         final date = dateStr != null
             ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? 'N/A'
             : 'N/A';
+        final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
 
         return Container(
           padding: const EdgeInsets.all(14),
@@ -432,13 +522,26 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: riskColor.withOpacity(0.12),
+                  color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: riskColor.withOpacity(0.3)),
+                  border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
                 ),
-                child: Text(
-                  risk.toUpperCase(),
-                  style: TextStyle(color: riskColor, fontSize: 10, fontWeight: FontWeight.bold),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isOfflinePending) ...[
+                      const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
+                      style: TextStyle(
+                        color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

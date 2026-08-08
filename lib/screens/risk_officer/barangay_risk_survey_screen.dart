@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/connectivity_service.dart';
+import '../../services/offline_sync_service.dart';
 import '../../services/supabase_service.dart';
 
 class BarangayRiskSurveyScreen extends StatefulWidget {
@@ -229,11 +231,11 @@ class _BarangayRiskSurveyScreenState extends State<BarangayRiskSurveyScreen> {
   String get _riskLevel {
     final rating = _vulnerabilityRating;
     if (rating == 5) {
-      return 'High';
+      return 'High Risk';
     } else if (rating == 4) {
-      return 'Medium';
+      return 'Medium Risk';
     } else {
-      return 'Low';
+      return 'Low Risk';
     }
   }
 
@@ -300,8 +302,10 @@ class _BarangayRiskSurveyScreenState extends State<BarangayRiskSurveyScreen> {
       },
     };
 
+    final isOnline = await ConnectivityService().hasInternetConnection();
+
     final surveyPayload = {
-      'inspector_id': user?.id,
+      'inspector_id': user?.id ?? profile?['id'],
       'survey_type': 'community_urban',
       'barangay_name': _selectedBarangay,
       'purok_name': purok,
@@ -320,8 +324,45 @@ class _BarangayRiskSurveyScreenState extends State<BarangayRiskSurveyScreen> {
       'updated_at': DateTime.now().toIso8601String(),
     };
 
+    if (!isOnline) {
+      // 1. Save locally with status = 'Pending Sync'
+      final offlinePayload = Map<String, dynamic>.from(surveyPayload);
+      offlinePayload['status'] = 'Pending Sync';
+      await OfflineSyncService().queueForSync(
+        targetTable: 'fire_risk_surveys',
+        payload: offlinePayload,
+      );
+
+      await AuthService().logAuditAction(
+        actionType: 'BARANGAY_RISK_QUEUED_OFFLINE',
+        targetEntity: '$_selectedBarangay${purok.isNotEmpty ? " ($purok)" : ""}',
+        details: 'Barangay CFPP Urban Risk Checklist queued locally for sync. Score: $_calculatedScore (Rating $_vulnerabilityRating).',
+      );
+
+      // 2. Display success feedback to inspector
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+            backgroundColor: Colors.amber,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        if (widget.onNavigateTab != null) {
+          widget.onNavigateTab!(0);
+        } else {
+          Navigator.pop(context);
+        }
+      }
+      if (mounted) setState(() => _isSubmitting = false);
+      return;
+    }
+
     try {
-      await client.from('fire_risk_surveys').insert(surveyPayload);
+      final onlinePayload = Map<String, dynamic>.from(surveyPayload);
+      onlinePayload.remove('status');
+      await client.from('fire_risk_surveys').insert(onlinePayload);
 
       await AuthService().logAuditAction(
         actionType: 'BARANGAY_RISK_PROFILED',
@@ -353,14 +394,28 @@ class _BarangayRiskSurveyScreenState extends State<BarangayRiskSurveyScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
+      debugPrint('Online submission error, queueing offline: $e');
+      final offlinePayload = Map<String, dynamic>.from(surveyPayload);
+      offlinePayload['status'] = 'Pending Sync';
+
+      await OfflineSyncService().queueForSync(
+        targetTable: 'fire_risk_surveys',
+        payload: offlinePayload,
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit CFPP risk survey: $e'),
-          backgroundColor: const Color(0xFFDC2626),
+        const SnackBar(
+          content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+          backgroundColor: Colors.amber,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      if (widget.onNavigateTab != null) {
+        widget.onNavigateTab!(0);
+      } else {
+        Navigator.pop(context);
+      }
     } finally {
       if (mounted) {
         setState(() {

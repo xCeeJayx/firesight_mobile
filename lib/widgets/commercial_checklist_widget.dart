@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/commercial_checklist_model.dart';
 import '../services/auth_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/offline_sync_service.dart';
 
 class CommercialChecklistWidget extends StatefulWidget {
   final String? assignmentId;
@@ -298,19 +300,40 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     setState(() => _isUploading = true);
 
     try {
-      final file = File(pickedFile.path);
-      final fileName = 'commercial_${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
+      final isOnline = await ConnectivityService().hasInternetConnection();
+      if (isOnline) {
+        final file = File(pickedFile.path);
+        final fileName = 'commercial_${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
 
-      await Supabase.instance.client.storage.from('hazard-photos').upload(fileName, file);
-      final publicUrl = Supabase.instance.client.storage.from('hazard-photos').getPublicUrl(fileName);
+        await Supabase.instance.client.storage.from('hazard-photos').upload(fileName, file);
+        final publicUrl = Supabase.instance.client.storage.from('hazard-photos').getPublicUrl(fileName);
 
-      setState(() {
-        _photoUrls.add(publicUrl);
-      });
+        setState(() {
+          _photoUrls.add(publicUrl);
+        });
+      } else {
+        // Offline: save local image file path for sync
+        setState(() {
+          _photoUrls.add(pickedFile.path);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Photo attached locally (Offline). Will upload upon sync.'),
+              backgroundColor: Color(0xFFD97706),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
     } catch (e) {
+      // Fallback: save local path on upload error
+      setState(() {
+        _photoUrls.add(pickedFile.path);
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload note: $e'), backgroundColor: errorColor),
+          SnackBar(content: Text('Photo saved locally: $e'), backgroundColor: warningColor),
         );
       }
     } finally {
@@ -319,7 +342,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   }
 
   Future<void> _submitReport() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? AuthService().userProfile?['id']?.toString();
     if (userId == null) return;
 
     setState(() => _isSubmitting = true);
@@ -370,25 +393,59 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     final payloadData = _model.toJson();
     payloadData['checklist_type'] = 'commercial';
 
-    try {
-      final updatePayload = <String, dynamic>{
-        'inspector_id': userId,
-        'checklist_type': 'commercial',
-        'inspection_order_no': _model.ioNumber.isNotEmpty ? _model.ioNumber : 'IO-${DateTime.now().millisecondsSinceEpoch}',
-        'date_issued': _model.dateIssued.isNotEmpty ? _model.dateIssued : DateTime.now().toIso8601String().split('T').first,
-        'date_inspected': _model.dateInspected.isNotEmpty ? _model.dateInspected : DateTime.now().toIso8601String().split('T').first,
-        'business_name': _model.businessName.isNotEmpty ? _model.businessName : (_model.buildingName.isNotEmpty ? _model.buildingName : 'Commercial Business'),
-        'address': _model.address.isNotEmpty ? _model.address : 'No address provided',
-        'overall_status': 'Completed',
-        'compliance_status': _model.recommendationAction ?? 'Inspected',
-        'recommendation': _model.recommendationAction ?? 'Notice to Comply',
-        'risk_level': 'Medium',
-        'score': 0,
-        'rating': _model.recommendationAction ?? 'Inspected',
-        'checklist_data': payloadData,
-        'hazard_photo_urls': _photoUrls,
-      };
+    final isOnline = await ConnectivityService().hasInternetConnection();
 
+    final updatePayload = <String, dynamic>{
+      'inspector_id': userId,
+      'checklist_type': 'commercial',
+      'inspection_order_no': _model.ioNumber.isNotEmpty ? _model.ioNumber : 'IO-${DateTime.now().millisecondsSinceEpoch}',
+      'date_issued': _model.dateIssued.isNotEmpty ? _model.dateIssued : DateTime.now().toIso8601String().split('T').first,
+      'date_inspected': _model.dateInspected.isNotEmpty ? _model.dateInspected : DateTime.now().toIso8601String().split('T').first,
+      'business_name': _model.businessName.isNotEmpty ? _model.businessName : (_model.buildingName.isNotEmpty ? _model.buildingName : 'Commercial Business'),
+      'address': _model.address.isNotEmpty ? _model.address : 'No address provided',
+      'overall_status': isOnline ? 'Completed' : 'Pending Sync',
+      'compliance_status': _model.recommendationAction ?? 'Inspected',
+      'recommendation': _model.recommendationAction ?? 'Notice to Comply',
+      'risk_level': 'Medium',
+      'score': 0,
+      'rating': _model.recommendationAction ?? 'Inspected',
+      'checklist_data': payloadData,
+      'hazard_photo_urls': _photoUrls,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    if (!isOnline) {
+      // 1. Save locally with overall_status = 'Pending Sync'
+      await OfflineSyncService().queueForSync(
+        targetTable: 'inspections',
+        payload: updatePayload,
+        id: widget.assignmentId,
+      );
+
+      await AuthService().logAuditAction(
+        actionType: 'COMMERCIAL_INSPECTION_QUEUED_OFFLINE',
+        targetEntity: _model.businessName.isNotEmpty ? _model.businessName : 'Commercial Establishment',
+        details: 'Queued Commercial Checklist (IO: ${_model.ioNumber}) locally for automatic sync.',
+      );
+
+      // 2. Display success feedback to inspector
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+            backgroundColor: Color(0xFFD97706),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      }
+      if (mounted) setState(() => _isSubmitting = false);
+      return;
+    }
+
+    try {
       if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
         await Supabase.instance.client
             .from('inspections')
@@ -419,10 +476,27 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
         }
       }
     } catch (e) {
+      debugPrint('Error submitting online, queueing offline: $e');
+      final offlinePayload = Map<String, dynamic>.from(updatePayload);
+      offlinePayload['overall_status'] = 'Pending Sync';
+
+      await OfflineSyncService().queueForSync(
+        targetTable: 'inspections',
+        payload: offlinePayload,
+        id: widget.assignmentId,
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error submitting report: $e'), backgroundColor: errorColor),
+          const SnackBar(
+            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+            backgroundColor: Color(0xFFD97706),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -1183,12 +1257,20 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
               ),
               itemCount: _photoUrls.length,
               itemBuilder: (context, index) {
+                final urlOrPath = _photoUrls[index];
+                ImageProvider imgProvider;
+                if (urlOrPath.startsWith('http')) {
+                  imgProvider = NetworkImage(urlOrPath);
+                } else {
+                  imgProvider = FileImage(File(urlOrPath));
+                }
+
                 return Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: borderColor),
                     image: DecorationImage(
-                      image: NetworkImage(_photoUrls[index]),
+                      image: imgProvider,
                       fit: BoxFit.cover,
                     ),
                   ),

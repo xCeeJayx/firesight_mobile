@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/offline_sync_service.dart';
 import 'commercial_inspection_form_screen.dart';
 import 'view_inspection_form_dialog.dart';
 
@@ -26,30 +27,45 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
   String _selectedFilter = 'All';
   late Future<List<Map<String, dynamic>>> _inspectionsFuture;
 
-  final List<String> _filterOptions = ['All', 'Assigned', 'In Progress', 'Completed'];
+  final List<String> _filterOptions = ['All', 'Assigned', 'In Progress', 'Pending Sync', 'Completed'];
 
   @override
   void initState() {
     super.initState();
     _refreshInspections();
+    OfflineSyncService().pendingCountNotifier.addListener(_refreshInspections);
   }
 
   @override
   void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_refreshInspections);
     _searchController.dispose();
     super.dispose();
   }
 
   void _refreshInspections() {
-    setState(() {
-      _inspectionsFuture = _fetchInspections();
-    });
+    if (mounted) {
+      setState(() {
+        _inspectionsFuture = _fetchInspections();
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchInspections() async {
     final user = Supabase.instance.client.auth.currentUser;
     final userId = user?.id;
 
+    List<Map<String, dynamic>> items = [];
+
+    // 1. Fetch offline pending items from local SQLite queue
+    try {
+      final offlineItems = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
+      items.addAll(offlineItems);
+    } catch (e) {
+      debugPrint('Error reading offline inspection queue: $e');
+    }
+
+    // 2. Fetch remote items from Supabase
     try {
       final client = Supabase.instance.client;
       var query = client.from('inspections').select();
@@ -57,35 +73,46 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
         query = query.eq('inspector_id', userId);
       }
       final response = await query.order('created_at', ascending: false);
+      final remoteList = List<Map<String, dynamic>>.from(response);
 
-      List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(response);
-
-      if (_selectedFilter != 'All') {
-        items = items.where((item) {
-          final st = (item['overall_status'] ?? '').toString().toLowerCase();
-          final targetFilter = _selectedFilter.toLowerCase();
-          if (targetFilter == 'assigned') {
-            return st == 'assigned' || st == 'pending' || st == 'scheduled';
-          }
-          return st == targetFilter;
-        }).toList();
+      // Merge avoiding duplicates if local item updated an existing remote ID
+      final Set<String> existingIds = items.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remoteList) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          items.add(r);
+        }
       }
-
-      final queryText = _searchController.text.trim().toLowerCase();
-      if (queryText.isNotEmpty) {
-        items = items.where((item) {
-          final bName = (item['business_name'] ?? '').toString().toLowerCase();
-          final ioNo = (item['inspection_order_no'] ?? '').toString().toLowerCase();
-          final addr = (item['address'] ?? '').toString().toLowerCase();
-          return bName.contains(queryText) || ioNo.contains(queryText) || addr.contains(queryText);
-        }).toList();
-      }
-
-      return items;
     } catch (e) {
-      debugPrint('Error fetching inspection hub items: $e');
-      return [];
+      debugPrint('Error fetching inspection hub items from network: $e');
     }
+
+    // 3. Apply filters
+    if (_selectedFilter != 'All') {
+      items = items.where((item) {
+        final st = (item['overall_status'] ?? '').toString().toLowerCase();
+        final targetFilter = _selectedFilter.toLowerCase();
+        if (targetFilter == 'assigned') {
+          return st == 'assigned' || st == 'pending' || st == 'scheduled';
+        }
+        if (targetFilter == 'pending sync') {
+          return st == 'pending sync' || item['_is_offline_pending'] == true;
+        }
+        return st == targetFilter;
+      }).toList();
+    }
+
+    final queryText = _searchController.text.trim().toLowerCase();
+    if (queryText.isNotEmpty) {
+      items = items.where((item) {
+        final bName = (item['business_name'] ?? '').toString().toLowerCase();
+        final ioNo = (item['inspection_order_no'] ?? '').toString().toLowerCase();
+        final addr = (item['address'] ?? '').toString().toLowerCase();
+        return bName.contains(queryText) || ioNo.contains(queryText) || addr.contains(queryText);
+      }).toList();
+    }
+
+    return items;
   }
 
   void _openForm([Map<String, dynamic>? item]) {
@@ -192,6 +219,63 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
                 ),
               ),
             ],
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: OfflineSyncService().pendingCountNotifier,
+            builder: (context, pendingCount, _) {
+              if (pendingCount == 0) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.sync_problem_rounded, color: Color(0xFFB45309), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '$pendingCount offline item(s) pending sync to Supabase.',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () async {
+                        final res = await OfflineSyncService().syncNow();
+                        _refreshInspections();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(res['message'] ?? 'Sync triggered.'),
+                              backgroundColor: res['success'] == true ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD97706),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sync_rounded, size: 14, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text('Sync Now', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 16),
           TextField(
@@ -315,6 +399,7 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
             final recommendation = task['recommendation'] ?? task['compliance_status'] ?? 'Assigned';
             final riskLevel = task['risk_level'] ?? 'Medium';
             final isCompleted = status.toString().toLowerCase() == 'completed' || status.toString().toLowerCase() == 'passed';
+            final bool isOfflinePending = status.toString().toLowerCase() == 'pending sync' || task['_is_offline_pending'] == true;
 
             return Container(
               padding: const EdgeInsets.all(16),
@@ -367,16 +452,26 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _getStatusBgColor(status),
+                          color: isOfflinePending ? const Color(0xFFFEF3C7) : _getStatusBgColor(status),
                           borderRadius: BorderRadius.circular(12),
+                          border: isOfflinePending ? Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)) : null,
                         ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: _getStatusTextColor(status),
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isOfflinePending) ...[
+                              const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              isOfflinePending ? 'PENDING SYNC (OFFLINE)' : status.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isOfflinePending ? const Color(0xFFB45309) : _getStatusTextColor(status),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

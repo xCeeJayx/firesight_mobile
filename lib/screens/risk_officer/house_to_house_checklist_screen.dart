@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/connectivity_service.dart';
+import '../../services/offline_sync_service.dart';
 import '../../services/supabase_service.dart';
 import '../../models/house_to_house_checklist_model.dart';
 
@@ -75,11 +77,11 @@ class _HouseToHouseChecklistScreenState extends State<HouseToHouseChecklistScree
   String get _riskLevel {
     final pts = _totalYesPoints;
     if (pts >= 24) {
-      return 'Low';
+      return 'Low Risk';
     } else if (pts >= 12) {
-      return 'Medium';
+      return 'Medium Risk';
     } else {
-      return 'High';
+      return 'High Risk';
     }
   }
 
@@ -131,8 +133,10 @@ class _HouseToHouseChecklistScreenState extends State<HouseToHouseChecklistScree
       'surveyorName': surveyorName,
     };
 
+    final isOnline = await ConnectivityService().hasInternetConnection();
+
     final payload = {
-      'inspector_id': user?.id,
+      'inspector_id': user?.id ?? profile?['id'],
       'survey_type': 'house_to_house',
       'barangay_name': _selectedBarangay,
       'purok_name': purok,
@@ -145,6 +149,41 @@ class _HouseToHouseChecklistScreenState extends State<HouseToHouseChecklistScree
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     };
+
+    if (!isOnline) {
+      // 1. Save locally with status = 'Pending Sync'
+      final offlinePayload = Map<String, dynamic>.from(payload);
+      offlinePayload['status'] = 'Pending Sync';
+      await OfflineSyncService().queueForSync(
+        targetTable: 'fire_risk_surveys',
+        payload: offlinePayload,
+      );
+
+      await AuthService().logAuditAction(
+        actionType: 'H2H_SURVEY_QUEUED_OFFLINE',
+        targetEntity: '$occupantName ($_selectedBarangay)',
+        details: 'H2H Household Fire Safety Inspection queued locally for sync. Score: $_totalYesPoints/35 ($_safetyInterpretation).',
+      );
+
+      // 2. Display success feedback to inspector
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+            backgroundColor: Colors.amber,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        if (widget.onNavigateTab != null) {
+          widget.onNavigateTab!(0);
+        } else {
+          Navigator.pop(context);
+        }
+      }
+      if (mounted) setState(() => _isSubmitting = false);
+      return;
+    }
 
     try {
       await client.from('fire_risk_surveys').insert(payload);
@@ -179,14 +218,28 @@ class _HouseToHouseChecklistScreenState extends State<HouseToHouseChecklistScree
         Navigator.pop(context);
       }
     } catch (e) {
+      debugPrint('Online submission failed, saving locally to sync queue: $e');
+      final offlinePayload = Map<String, dynamic>.from(payload);
+      offlinePayload['status'] = 'Pending Sync';
+
+      await OfflineSyncService().queueForSync(
+        targetTable: 'fire_risk_surveys',
+        payload: offlinePayload,
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit H2H survey: $e'),
-          backgroundColor: const Color(0xFFDC2626),
+        const SnackBar(
+          content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+          backgroundColor: Colors.amber,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      if (widget.onNavigateTab != null) {
+        widget.onNavigateTab!(0);
+      } else {
+        Navigator.pop(context);
+      }
     } finally {
       if (mounted) {
         setState(() {

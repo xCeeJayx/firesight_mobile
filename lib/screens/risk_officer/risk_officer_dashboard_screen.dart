@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/offline_sync_service.dart';
 import 'barangay_risk_survey_screen.dart';
 import 'house_to_house_checklist_screen.dart';
 
@@ -32,6 +33,13 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
     super.initState();
     _loadProfile();
     _fetchLiveMetricsAndFeed();
+    OfflineSyncService().pendingCountNotifier.addListener(_fetchLiveMetricsAndFeed);
+  }
+
+  @override
+  void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_fetchLiveMetricsAndFeed);
+    super.dispose();
   }
 
   void _loadProfile() {
@@ -45,65 +53,81 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
   }
 
   Future<void> _fetchLiveMetricsAndFeed() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
+    List<Map<String, dynamic>> allSurveys = [];
+
+    // 1. Read offline pending surveys
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'fire_risk_surveys');
+      allSurveys.addAll(offline);
+    } catch (e) {
+      debugPrint('Error reading offline surveys in dashboard: $e');
+    }
+
+    // 2. Fetch remote surveys from Supabase
     try {
       final client = Supabase.instance.client;
-
-      // Fetch recent survey stream ordered by created_at DESC
       final res = await client
           .from('fire_risk_surveys')
           .select()
           .order('created_at', ascending: false);
 
-      final List<Map<String, dynamic>> allSurveys = List<Map<String, dynamic>>.from(res);
-
-      // KPI Metrics calculation
-      final Set<String> distinctAssessedBarangays = {};
-      int h2hCount = 0;
-      int highRiskCount = 0;
-
-      for (var item in allSurveys) {
-        String bgy = (item['barangay_name'] ?? item['barangay'] ?? '').toString().trim();
-        if (bgy.isEmpty && item['survey_data'] is Map) {
-          bgy = (item['survey_data']['barangayName'] ?? item['survey_data']['barangay'] ?? '').toString().trim();
-        }
-
-        final cleanBgy = bgy
-            .replaceAll(RegExp(r'^brgy\.?\s*', caseSensitive: false), '')
-            .replaceAll(RegExp(r'^barangay\s*', caseSensitive: false), '')
-            .trim();
-
-        if (cleanBgy.isNotEmpty) {
-          distinctAssessedBarangays.add(cleanBgy.toLowerCase());
-        }
-
-        final surveyType = (item['survey_type'] ?? '').toString().toLowerCase().trim();
-        final checklistType = (item['checklist_type'] ?? '').toString().toLowerCase().trim();
-        final isH2H = surveyType == 'house_to_house' || checklistType == 'house_to_house';
-
-        if (isH2H) {
-          h2hCount++;
-        }
-
-        final risk = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString();
-        if (risk.toLowerCase().contains('high')) {
-          highRiskCount++;
+      final List<Map<String, dynamic>> remote = List<Map<String, dynamic>>.from(res);
+      final Set<String> existingIds = allSurveys.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          allSurveys.add(r);
         }
       }
+    } catch (e) {
+      debugPrint('Error loading remote surveys in dashboard: $e');
+    }
 
+    // KPI Metrics calculation
+    final Set<String> distinctAssessedBarangays = {};
+    int h2hCount = 0;
+    int highRiskCount = 0;
+
+    for (var item in allSurveys) {
+      String bgy = (item['barangay_name'] ?? item['barangay'] ?? '').toString().trim();
+      if (bgy.isEmpty && item['survey_data'] is Map) {
+        bgy = (item['survey_data']['barangayName'] ?? item['survey_data']['barangay'] ?? '').toString().trim();
+      }
+
+      final cleanBgy = bgy
+          .replaceAll(RegExp(r'^brgy\.?\s*', caseSensitive: false), '')
+          .replaceAll(RegExp(r'^barangay\s*', caseSensitive: false), '')
+          .trim();
+
+      if (cleanBgy.isNotEmpty) {
+        distinctAssessedBarangays.add(cleanBgy.toLowerCase());
+      }
+
+      final surveyType = (item['survey_type'] ?? '').toString().toLowerCase().trim();
+      final checklistType = (item['checklist_type'] ?? '').toString().toLowerCase().trim();
+      final isH2H = surveyType == 'house_to_house' || checklistType == 'house_to_house';
+
+      if (isH2H) {
+        h2hCount++;
+      }
+
+      final risk = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString();
+      if (risk.toLowerCase().contains('high')) {
+        highRiskCount++;
+      }
+    }
+
+    if (mounted) {
       setState(() {
         _recentSurveys = allSurveys.take(10).toList();
         _assessedBarangaysCount = distinctAssessedBarangays.length;
         _totalH2HInspectionsCount = h2hCount;
         _highRiskZonesCount = highRiskCount;
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint('Error loading dashboard metrics: $e');
-      setState(() {
         _isLoading = false;
       });
     }
@@ -415,6 +439,7 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
         final date = dateStr != null
             ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? 'N/A'
             : 'N/A';
+        final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
 
         return Container(
           padding: const EdgeInsets.all(14),
@@ -485,13 +510,26 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: riskColor.withOpacity(0.12),
+                  color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: riskColor.withOpacity(0.3)),
+                  border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
                 ),
-                child: Text(
-                  risk.toUpperCase(),
-                  style: TextStyle(color: riskColor, fontSize: 11, fontWeight: FontWeight.bold),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isOfflinePending) ...[
+                      const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
+                      style: TextStyle(
+                        color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

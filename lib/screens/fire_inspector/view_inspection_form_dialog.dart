@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -95,12 +96,29 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
     return model;
   }
 
-  // PDF Exporter creating exact 10-page BFP Form 061 document
+  // PDF Exporter creating exact 10-page BFP Form 061 document matching Word template
   Future<void> _exportPdf(CommercialChecklistModel model) async {
     final pdf = pw.Document();
 
-    const pdfPageFormat = PdfPageFormat.a4;
-    const margin = pw.EdgeInsets.symmetric(horizontal: 28, vertical: 24);
+    const pdfPageFormat = PdfPageFormat.legal;
+    const margin = pw.EdgeInsets.only(left: 72, right: 10, top: 40, bottom: 40);
+
+    pw.MemoryImage? bfpLogo;
+    pw.MemoryImage? dilgLogo;
+
+    try {
+      final bfpBytes = await rootBundle.load('assets/bfp_logo.png');
+      bfpLogo = pw.MemoryImage(bfpBytes.buffer.asUint8List());
+    } catch (e) {
+      debugPrint('BFP logo load note: $e');
+    }
+
+    try {
+      final dilgBytes = await rootBundle.load('assets/dilg_logo.png');
+      dilgLogo = pw.MemoryImage(dilgBytes.buffer.asUint8List());
+    } catch (e) {
+      debugPrint('DILG logo load note: $e');
+    }
 
     // PAGE 1 OF 10
     pdf.addPage(
@@ -111,7 +129,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(1),
+              _pdfHeader(1, dilgLogo, bfpLogo),
               _pdfSectionHeader('I. REFERENCE:'),
               _pdfUnderlineRow('Inspection Order No. (IO) :', model.ioNumber),
               _pdfUnderlineRow('Date Issued :', model.dateIssued),
@@ -148,14 +166,14 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               _pdfUnderlineRow('Nature of Business :', model.natureOfBusiness.isNotEmpty ? model.natureOfBusiness : 'Commercial Establishment'),
               _pdfUnderlineRow('Name of owner/Representative :', model.ownerRepresentative.isNotEmpty ? model.ownerRepresentative : 'N/A'),
               _pdfUnderlineRow('Contact No. :', model.contactNo.isNotEmpty ? model.contactNo : 'N/A'),
-              pw.SizedBox(height: 6),
+              pw.SizedBox(height: 8),
 
-              pw.Text('[   ] FSIC for Occupancy:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('[   ] FSIC for Occupancy:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfUnderlineRow('• FSEC No. :', '${model.fsecNo}      / Date Issued : ${model.fsecDateIssued}'),
               _pdfUnderlineRow('• Building Permit :', '${model.buildingPermitNo}      / Date Issued : ${model.buildingPermitDateIssued}'),
-              pw.SizedBox(height: 6),
+              pw.SizedBox(height: 8),
 
-              pw.Text('[ ✓ ] FSIC for New / Renewal / Annual Inspection / Others:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('[ ✓ ] FSIC for New / Renewal / Annual Inspection / Others:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfUnderlineRow('• FSIC No. (Latest) :', '${model.fsicNoLatest}      / Date Issued : ${model.fsicDateIssued}'),
               _pdfUnderlineRow('• Certificate of Fire Drill :', '${model.fireDrillCertNo}      / Date Issued : ${model.fireDrillDateIssued}'),
               _pdfUnderlineRow('• Business Permit No. :', '${model.businessPermitNo}      / Date Issued : ${model.businessPermitDateIssued}'),
@@ -175,26 +193,26 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(2),
+              _pdfHeader(2, dilgLogo, bfpLogo),
               _pdfSectionHeader('CONSTRUCTION TYPE'),
               _pdfCheckboxLine(model.constructionType == 'Type I' || model.constructionType == null, '[ ✓ ] Type I : Concrete & Steel (Fire Resistive)'),
               _pdfCheckboxLine(model.constructionType == 'Type II', '[   ] Type II : Concrete & Exposed Steel (Noncombustible)'),
               _pdfCheckboxLine(model.constructionType == 'Type III', '[   ] Type III : Concrete & Wood (Ordinary)'),
               _pdfCheckboxLine(model.constructionType == 'Type IV', '[   ] Type IV : Heavy Timber (Large mass wood)'),
               _pdfCheckboxLine(model.constructionType == 'Type V', '[   ] Type V : Wood frame (Lightweight wood)'),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
               _pdfSectionHeader('WALLS / CEILING INTERIOR FINISH'),
-              _pdfCheckboxLine(model.interiorFinishWalls == 'Class A' || model.interiorFinishWalls == null, '[ ✓ ] Class A : Flame spread index, 0–25;smoke developed index, 0–450'),
+              _pdfCheckboxLine(model.interiorFinishWalls == 'Class A' || model.interiorFinishWalls == null, '[ ✓ ] Class A : Flame spread index, 0–25; smoke developed index, 0–450'),
               _pdfCheckboxLine(model.interiorFinishWalls == 'Class B', '[   ] Class B : Flame spread index, 26–75; smoke developed index, 0–450'),
               _pdfCheckboxLine(model.interiorFinishWalls == 'Class C', '[   ] Class C : Flame spread index, 76–200; smoke developed index, 0–450'),
-              pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
+              pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
               pw.SizedBox(height: 10),
 
               _pdfSectionHeader('FLOOR INTERIOR FINISH'),
               _pdfCheckboxLine(model.interiorFinishFloor == 'Class I' || model.interiorFinishFloor == null, '[ ✓ ] Class I : Critical radiant flux, not less than 0.45 W/cm2.'),
-              _pdfCheckboxLine(model.interiorFinishFloor == 'Class II', '[   ] Class II : Critical radiant flux, not more than 0.22 W/cm2, but less than 0.45W/cm2'),
-              pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
+              _pdfCheckboxLine(model.interiorFinishFloor == 'Class II', '[   ] Class II : Critical radiant flux, not more than 0.22 W/cm2, but less than 0.45 W/cm2'),
+              pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
               pw.SizedBox(height: 10),
 
               _pdfSectionHeader('SECTIONAL OCCUPANCY (INDICATE SPECIFIC USAGE OF EACH FLOOR, PART OR PORTION OF THE BUILDING)'),
@@ -204,7 +222,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               _pdfUnderlineRow('Third floor :', model.thirdFloorUsage),
               _pdfUnderlineRow('Fourth Floor :', model.fourthFloorUsage),
               _pdfUnderlineRow('Nth Floor :', model.nthFloorUsage),
-              pw.Text('Use separate sheet if necessary', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
+              pw.Text('Use separate sheet if necessary', style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
               pw.SizedBox(height: 10),
 
               _pdfSectionHeader('GENERAL OCCUPANCY CLASSIFICATION'),
@@ -233,11 +251,11 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(3),
+              _pdfHeader(3, dilgLogo, bfpLogo),
               _pdfSectionHeader('V. MEANS OF EGRESS'),
-              pw.Text('A. EXIT ACCESS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              pw.Text('[ ✓ ] Doors / [ ✓ ] Corridors / [ ✓ ] Hallways / [   ] Passageways / [   ] Anterooms / [   ] Ramps', style: const pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 6),
+              pw.Text('A. EXIT ACCESS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              pw.Text('[ ] Doors  /  [ ] Corridors  /  [ ] Hallways  /  [ ] Passageways  /  [ ] Anterooms  /  [ ] Ramps', style: const pw.TextStyle(fontSize: 10)),
+              pw.SizedBox(height: 8),
 
               _pdfEgressHorizontalTable(model),
               pw.SizedBox(height: 10),
@@ -245,11 +263,11 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               _pdfEgressRequirementsTable(model),
               pw.SizedBox(height: 10),
 
-              pw.Text('B. EXITS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              pw.Text('[ ✓ ] Normal Stairs / [   ] Curved Stairs / [   ] Spiral Stairs / [   ] Winding Stairs', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('[   ] Horizontal Exits / [   ] Outside Stairs / Exit Passageways / Fire Escape Stairs', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('[   ] Fire Escape Ladder (for 1 & 2 family dwelling only)', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('[   ] Slide Escape (for Industrial Occupancy Only)', style: const pw.TextStyle(fontSize: 8)),
+              pw.Text('B. EXITS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              pw.Text('[ ] Normal Stairs  /  [ ] Curved Stairs  /  [ ] Spiral Stairs  /  [ ] Winding Stairs', style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('[ ] Horizontal Exits  /  [ ] Outside Stairs / Exit Passageways / Fire Escape Stairs', style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('[ ] Fire Escape Ladder (for 1 & 2 family dwelling only)', style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('[ ] Slide Escape (for Industrial Occupancy Only)', style: const pw.TextStyle(fontSize: 10)),
             ],
           );
         },
@@ -265,7 +283,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(4),
+              _pdfHeader(4, dilgLogo, bfpLogo),
               _pdfSectionHeader('EXITS COMPONENTS CLEAR WIDTH TABLE'),
               _pdfExitsComponentsTable(model),
               pw.SizedBox(height: 10),
@@ -287,17 +305,17 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(5),
+              _pdfHeader(5, dilgLogo, bfpLogo),
               _pdfSectionHeader('C. EXITS DISCHARGE'),
               _pdfExitsDischargeTable(model),
               pw.SizedBox(height: 10),
 
               _pdfSectionHeader('VI. SIGNS, LIGHTING, AND EXITS SIGNAGE'),
-              pw.Text('A. MARKING OF MEANS OF EGRESS (EXIT)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              pw.Text('A. MARKING OF MEANS OF EGRESS (EXIT)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfExitMarkingTable(model),
               pw.SizedBox(height: 10),
 
-              pw.Text('B. MARKING OF MEANS OF EGRESS (EMERGENCY EVACUATION PLAN)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              pw.Text('B. MARKING OF MEANS OF EGRESS (EMERGENCY EVACUATION PLAN)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfEvacuationPlanTable(model),
             ],
           );
@@ -314,10 +332,10 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(6),
+              _pdfHeader(6, dilgLogo, bfpLogo),
               _pdfSectionHeader('EMERGENCY EVACUATION PLAN SIZES'),
               _pdfEvacuationPlanSizesTable(model),
-              pw.SizedBox(height: 12),
+              pw.SizedBox(height: 10),
 
               _pdfSectionHeader('C. ILLUMINATION OF MEANS OF EGRESS (All Data Below Shall be Referred from Manufacturers Specifications)'),
               _pdfIlluminationTable(model),
@@ -336,20 +354,20 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(7),
+              _pdfHeader(7, dilgLogo, bfpLogo),
               _pdfSectionHeader('VII. HAZARD'),
               _pdfUnderlineRow('Hazard Contents :', 'None / Low Combustible'),
               _pdfUnderlineRow('Quantity (Vol. / Weight) :', 'Standard Commercial Storage'),
               _pdfUnderlineRow('Hazard Identification Placard :', 'Posted / Compliant   Within MAQ: [ ✓ ] Yes / [   ] No'),
               _pdfUnderlineRow('Hazard Identification No. :', 'N/A   Hazard Classification: [ ✓ ] Low / [   ] Ordinary / [   ] High'),
               _pdfUnderlineRow('Class :', 'Class A   Flash Point: N/A'),
-              pw.SizedBox(height: 6),
-              pw.Text('Low hazard contents shall be classified as those of such low combustibility that no self-propagating fire therein can occur.', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
-              pw.Text('Ordinary hazard contents shall be classified as those that are likely to burn with moderate rapidity or to give off a considerable volume of smoke.', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
-              pw.Text('High hazard contents shall be classified as those that are likely to burn with extreme rapidity or from which explosions are likely.', style: pw.TextStyle(fontSize: 7.5, fontStyle: pw.FontStyle.italic)),
+              pw.SizedBox(height: 8),
+              pw.Text('Low hazard contents shall be classified as those of such low combustibility that no self-propagating fire therein can occur.', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
+              pw.Text('Ordinary hazard contents shall be classified as those that are likely to burn with moderate rapidity or to give off a considerable volume of smoke.', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
+              pw.Text('High hazard contents shall be classified as those that are likely to burn with extreme rapidity or from which explosions are likely.', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
               pw.SizedBox(height: 10),
 
-              _pdfSectionHeader('A. OTHER FLAMMABLE LIQUIDS (I.E. ALCOHOL, ETHER, ETC...)'),
+              _pdfSectionHeader('A. OTHER FLAMMABLE LIQUIDS (I.E. ALCOHOL, ETHER, ETC…)'),
               _pdfHazardTableA(model),
               pw.SizedBox(height: 10),
 
@@ -374,29 +392,29 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(8),
+              _pdfHeader(8, dilgLogo, bfpLogo),
               _pdfSectionHeader('VIII. FIRE PROTECTION'),
-              pw.Text('A. Automatic Fire Suppression System (Sprinkler)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('A. Automatic Fire Suppression System (Sprinkler)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableA(model),
               pw.SizedBox(height: 8),
 
-              pw.Text('B. Wet Standpipe/Fire Hose Cabinet', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('B. Wet Standpipe/Fire Hose Cabinet', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableB(model),
               pw.SizedBox(height: 8),
 
-              pw.Text('C. Fire Pump', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('C. Fire Pump', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableC(model),
               pw.SizedBox(height: 8),
 
-              pw.Text('D. Fire Detection System', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('D. Fire Detection System', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableD(model),
               pw.SizedBox(height: 8),
 
-              pw.Text('E. Fire Alarm Facilities', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('E. Fire Alarm Facilities', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableE(model),
               pw.SizedBox(height: 8),
 
-              pw.Text('F. Lifts (Elevator)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('F. Lifts (Elevator)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableF(model),
             ],
           );
@@ -413,18 +431,18 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(9),
-              pw.Text('G. First Aid Fire Protection (Fire Extinguishers)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              _pdfHeader(9, dilgLogo, bfpLogo),
+              pw.Text('G. First Aid Fire Protection (Fire Extinguishers)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableG(model),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
-              pw.Text('H. Emergency Lighting Systems', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('H. Emergency Lighting Systems', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableH(model),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
-              pw.Text('I. Kitchen', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+              pw.Text('I. Kitchen', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               _pdfFireProtectionTableI(model),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
               _pdfSectionHeader('J. BUILDING SERVICE EQUIPMENT'),
               _pdfBuildingServiceEquipmentTable(model),
@@ -443,18 +461,18 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _pdfHeader(10),
+              _pdfHeader(10, dilgLogo, bfpLogo),
               _pdfSectionHeader('K. FIRE WALL (FW) (if required)'),
               _pdfFireWallTable(model),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
-              _pdfSectionHeader('DEFECTS/DEFICIENCIES'),
+              _pdfSectionHeader('DEFECTS/DEFICIENCIES (Attached pictures, sketch and others)'),
               _pdfUnderlineRow('ITEM IV :', ''),
               _pdfUnderlineRow('ITEM V :', ''),
               _pdfUnderlineRow('ITEM VI :', ''),
               _pdfUnderlineRow('ITEM VII :', ''),
               _pdfUnderlineRow('ITEM VIII :', model.defectsSummary.isNotEmpty ? model.defectsSummary : 'No defects noted during fire safety inspection.'),
-              pw.SizedBox(height: 12),
+              pw.SizedBox(height: 10),
 
               _pdfSectionHeader('IX. RECOMMENDATIONS'),
               _pdfCheckboxLine(
@@ -463,22 +481,23 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               ),
               _pdfCheckboxLine(
                 model.recommendationAction?.toUpperCase().contains('NTC') ?? false,
-                '[   ] For issuance of [   ] Notice to Comply',
+                '[   ] For issuance of      [   ] Notice to Comply',
               ),
               _pdfCheckboxLine(
                 model.recommendationAction?.toUpperCase().contains('NTCV') ?? false,
-                '                           [   ] Notice to Correct Violation',
+                '                                    [   ] Notice to Correct Violation',
               ),
               _pdfCheckboxLine(
                 model.recommendationAction?.toUpperCase().contains('CLOSURE') ?? false,
-                '                           [   ] Closure Order',
+                '                                    [   ] Closure Order',
               ),
-              _pdfCheckboxLine(false, '                           [   ] Abatement Order with Administrative Fine'),
-              _pdfCheckboxLine(false, '                           [   ] Closure Order for the non-payment of Administrative Fine'),
-              pw.SizedBox(height: 16),
+              _pdfCheckboxLine(false, '                                    [   ] Abatement Order with Administrative Fine'),
+              _pdfCheckboxLine(false, '                                    [   ] Closure Order for the non-payment of Administrative Fine'),
+              _pdfCheckboxLine(false, '                                    [   ] Notice of Disapproval (NOD)'),
+              pw.SizedBox(height: 14),
 
               _pdfSectionHeader('ACKNOWLEDGED BY:'),
-              pw.SizedBox(height: 14),
+              pw.SizedBox(height: 10),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -487,16 +506,17 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                   _pdfSignatoryColumn('Team Leader', model.teamLeaderName.isNotEmpty ? model.teamLeaderName : 'Inspector Team Leader'),
                 ],
               ),
+              pw.SizedBox(height: 6),
               _pdfUnderlineRow('Date & Time :', '${model.dateInspected} 10:00 AM'),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 12),
 
-              pw.Center(child: pw.Text('RECOMMEND APPROVAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
-              pw.SizedBox(height: 14),
+              pw.Center(child: pw.Text('RECOMMEND APPROVAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+              pw.SizedBox(height: 10),
               pw.Center(child: _pdfSignatoryColumn('CHIEF, FIRE SAFETY ENFORCEMENT SECTION/UNIT', model.fireMarshalName.isNotEmpty ? model.fireMarshalName : 'Chief FSED')),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 12),
 
-              pw.Center(child: pw.Text('APPROVAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5))),
-              pw.SizedBox(height: 14),
+              pw.Center(child: pw.Text('APPROVAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+              pw.SizedBox(height: 10),
               pw.Center(child: _pdfSignatoryColumn('CITY/ MUNICIPAL FIRE MARSHAL', 'CINSP BFP Fire Marshal')),
             ],
           );
@@ -510,25 +530,83 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
     );
   }
 
-  // PDF Page Header Helper
-  pw.Widget _pdfHeader(int pageNum) {
+  // Official PDF Header with DILG & BFP Logos
+  pw.Widget _pdfHeader(int pageNum, pw.MemoryImage? dilgLogo, pw.MemoryImage? bfpLogo) {
     return pw.Column(
       children: [
-        pw.Text('Republic of the Philippines', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-        pw.Text('Department of the Interior and Local Government', style: const pw.TextStyle(fontSize: 7.5)),
-        pw.Text('BUREAU OF FIRE PROTECTION', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-        pw.Text('(FIRE STATION LETTER HEAD)', style: const pw.TextStyle(fontSize: 7.5)),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            if (dilgLogo != null)
+              pw.Container(
+                width: 55,
+                height: 55,
+                child: pw.Image(dilgLogo, fit: pw.BoxFit.contain),
+              )
+            else
+              pw.SizedBox(width: 55, height: 55),
+            pw.Expanded(
+              child: pw.Column(
+                children: [
+                  pw.Text(
+                    'Republic of the Philippines',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                  pw.Text(
+                    'Department of the Interior and Local Government',
+                    style: const pw.TextStyle(fontSize: 10),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                  pw.Text(
+                    'BUREAU OF FIRE PROTECTION',
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromInt(0xFF0F172A),
+                      letterSpacing: 0.5,
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                  pw.Text(
+                    '(LINGAYEN FIRE STATION - PANGASINAN)',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromInt(0xFFC2410C),
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            if (bfpLogo != null)
+              pw.Container(
+                width: 55,
+                height: 55,
+                child: pw.Image(bfpLogo, fit: pw.BoxFit.contain),
+              )
+            else
+              pw.SizedBox(width: 55, height: 55),
+          ],
+        ),
+        pw.SizedBox(height: 3),
+        pw.Divider(thickness: 0.5, color: PdfColors.grey700),
         pw.SizedBox(height: 2),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('BFP-QSF-FSED-061 Rev. ØØ (06.17.22)', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
-            pw.Text('Page $pageNum of 10', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+            pw.Text('BFP-QSF-FSED-061 Rev. ØØ (06.17.22)', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+            pw.Text('Page $pageNum of 10', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
           ],
         ),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Center(
-          child: pw.Text('FIRE SAFETY INSPECTION CHECKLIST', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          child: pw.Text(
+            'FIRE SAFETY INSPECTION CHECKLIST',
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, letterSpacing: 0.5),
+          ),
         ),
         pw.SizedBox(height: 6),
       ],
@@ -541,22 +619,22 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
       padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       color: PdfColors.grey300,
       width: double.infinity,
-      child: pw.Text(title, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+      child: pw.Text(title, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
     );
   }
 
   pw.Widget _pdfUnderlineRow(String label, String value) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.SizedBox(width: 160, child: pw.Text(label, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+          pw.SizedBox(width: 200, child: pw.Text(label, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(
             child: pw.Container(
               decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
               padding: const pw.EdgeInsets.only(bottom: 1),
-              child: pw.Text(value.isNotEmpty ? value : '__________________________________________________', style: const pw.TextStyle(fontSize: 8)),
+              child: pw.Text(value.isNotEmpty ? value : '__________________________________________________', style: const pw.TextStyle(fontSize: 10)),
             ),
           ),
         ],
@@ -566,17 +644,17 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
   pw.Widget _pdfCheckboxLine(bool isChecked, String label) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1),
-      child: pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+      child: pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
     );
   }
 
   pw.Widget _pdfSignatoryColumn(String title, String name) {
     return pw.Column(
       children: [
-        pw.Container(width: 140, child: pw.Divider(thickness: 0.5)),
-        pw.Text(name, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-        pw.Text(title, style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700), textAlign: pw.TextAlign.center),
+        pw.Container(width: 160, child: pw.Divider(thickness: 0.5)),
+        pw.Text(name, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+        pw.Text(title, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700), textAlign: pw.TextAlign.center),
       ],
     );
   }
@@ -939,15 +1017,15 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
   pw.Widget _tableHeaderCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(3),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+      padding: const pw.EdgeInsets.all(4),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
     );
   }
 
   pw.Widget _tableCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(3),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 7.5)),
+      padding: const pw.EdgeInsets.all(4),
+      child: pw.Text(text, style: const pw.TextStyle(fontSize: 10)),
     );
   }
 
@@ -1008,9 +1086,9 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
             return Column(
               children: [
-                // Dialog Top Bar
+                // Clean Responsive Dialog Top Bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: const BoxDecoration(
                     color: colorPrimary,
                     borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
@@ -1020,72 +1098,80 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: colorAccent.withOpacity(0.2),
+                          color: colorAccent.withOpacity(0.25),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.description_outlined, color: Colors.white, size: 20),
+                        child: const Icon(Icons.description_outlined, color: Colors.white, size: 18),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
-                              'BFP Form 061 Checklist Viewer',
+                              'BFP Form 061',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              'Official 10-Page Inspection Checklist • IO: ${model.ioNumber}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              'Official Checklist • IO: ${model.ioNumber}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 6),
                       ElevatedButton.icon(
                         onPressed: () => _exportPdf(model),
-                        icon: const Icon(Icons.print_outlined, size: 16, color: Colors.white),
+                        icon: const Icon(Icons.print_outlined, size: 14, color: Colors.white),
                         label: const Text(
-                          'Print / Export 10-Page PDF',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                          'Export PDF',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: colorAccent,
                           elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
                 ),
 
-                // Dialog Paper Sheet Preview
+                // Dialog Paper Sheet Preview: Page 1 Only
                 Expanded(
                   child: Container(
                     color: const Color(0xFFF1F5F9),
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                       child: Center(
                         child: Container(
                           constraints: const BoxConstraints(maxWidth: 760),
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: const Color(0xFFCBD5E1)),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
                             ],
@@ -1094,13 +1180,13 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _buildFormHeader(),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
 
                               _buildFormSectionTitle('I. REFERENCE:'),
                               _buildFormLine('Inspection Order No. (IO) :', model.ioNumber),
                               _buildFormLine('Date Issued :', model.dateIssued),
                               _buildFormLine('Date Inspected :', model.dateInspected),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
 
                               _buildFormSectionTitle('II. NATURE OF INSPECTION CONDUCTED (Check appropriate box)'),
                               _buildFormCheckbox(model.inspectionNature == 'Construction', '1. [   ] Inspection during construction'),
@@ -1112,7 +1198,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                                 '5. [   ] Verification Inspection for Compliance: [ ${model.verificationType == 'NTC' ? '✓' : ' '} ] NTC / [ ${model.verificationType == 'NTCV' ? '✓' : ' '} ] NTCV / [ ${model.verificationType == 'Abatement' ? '✓' : ' '} ] Abatement / [ ${model.verificationType == 'Closure' ? '✓' : ' '} ] Closure',
                               ),
                               _buildFormLine('6. Others (Specify) :', model.natureOthersSpecify ?? ''),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
 
                               _buildFormSectionTitle('III. REQUIREMENTS'),
                               _buildFormCheckbox(
@@ -1123,7 +1209,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                                 model.fsmrRequired != null,
                                 '2. [ ✓ ] FSIC for New / Renewal / Annual Inspection: Fire Safety Maintenance Report (FSMR)   Yes [ ${model.fsmrRequired == 'Yes' ? '✓' : ' '} ] / No [ ${model.fsmrRequired == 'No' ? '✓' : ' '} ]',
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
 
                               _buildFormSectionTitle('IV. GENERAL INFORMATION'),
                               _buildFormLine('Name of Building :', model.buildingName),
@@ -1132,19 +1218,19 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                               _buildFormLine('Nature of Business :', model.natureOfBusiness.isNotEmpty ? model.natureOfBusiness : 'Commercial Establishment'),
                               _buildFormLine('Name of owner/Representative :', model.ownerRepresentative.isNotEmpty ? model.ownerRepresentative : 'N/A'),
                               _buildFormLine('Contact No. :', model.contactNo.isNotEmpty ? model.contactNo : 'N/A'),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
 
-                              const Text('[   ] FSIC for Occupancy:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: colorTextPrimary)),
+                              const Text('[   ] FSIC for Occupancy:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: colorTextPrimary)),
                               _buildFormLine('• FSEC No. :', '${model.fsecNo}      / Date Issued : ${model.fsecDateIssued}'),
                               _buildFormLine('• Building Permit :', '${model.buildingPermitNo}      / Date Issued : ${model.buildingPermitDateIssued}'),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
 
-                              const Text('[ ✓ ] FSIC for New / Renewal / Annual Inspection / Others:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: colorTextPrimary)),
+                              const Text('[ ✓ ] FSIC for New / Renewal / Annual Inspection / Others:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: colorTextPrimary)),
                               _buildFormLine('• FSIC No. (Latest) :', '${model.fsicNoLatest}      / Date Issued : ${model.fsicDateIssued}'),
                               _buildFormLine('• Certificate of Fire Drill :', '${model.fireDrillCertNo}      / Date Issued : ${model.fireDrillDateIssued}'),
                               _buildFormLine('• Business Permit No. :', '${model.businessPermitNo}      / Date Issued : ${model.businessPermitDateIssued}'),
                               _buildFormLine('• Fire Insurance Policy No. (If any) :', '${model.fireInsurancePolicyNo}      / Date Issued : ${model.fireInsuranceDateIssued}'),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
 
                               _buildFormSectionTitle('CONSTRUCTION TYPE'),
                               _buildFormCheckbox(model.constructionType == 'Type I' || model.constructionType == null, '[ ✓ ] Type I : Concrete & Steel (Fire Resistive)'),
@@ -1164,7 +1250,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                               _buildFormLine('Number of Stories :', '${model.numberOfStories.isNotEmpty ? model.numberOfStories : '2'} Storey'),
                               _buildFormLine('Building Height :', '${model.buildingHeight.isNotEmpty ? model.buildingHeight : '6'} m'),
                               _buildFormLine('Highrise :', 'Highrise: [   ] Yes / [ ✓ ] No'),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
 
                               _buildFormSectionTitle('DEFECTS / DEFICIENCIES NOTED'),
                               Container(
@@ -1176,10 +1262,10 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                                 ),
                                 child: Text(
                                   model.defectsSummary.isNotEmpty ? model.defectsSummary : 'No major fire safety deficiencies noted during inspection.',
-                                  style: const TextStyle(fontSize: 12, color: colorTextPrimary),
+                                  style: const TextStyle(fontSize: 11, color: colorTextPrimary),
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
 
                               _buildFormSectionTitle('IX. RECOMMENDATIONS'),
                               _buildFormCheckbox(
@@ -1190,30 +1276,57 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                                 model.recommendationAction?.toUpperCase().contains('NTC') ?? false,
                                 '[   ] For issuance of [   ] Notice to Comply',
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 20),
 
                               _buildFormSectionTitle('ACKNOWLEDGED BY:'),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(child: _buildUiSignatory('Signature Over Printed Name of\nOwner / Representative', model.ownerRepresentative)),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
                                   Expanded(child: _buildUiSignatory('Fire Safety Inspector/s', model.inspectorName)),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
                                   Expanded(child: _buildUiSignatory('Team Leader', model.teamLeaderName)),
                                 ],
                               ),
+                              const SizedBox(height: 18),
+
+                              const Center(child: Text('RECOMMEND APPROVAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: colorTextPrimary))),
+                              const SizedBox(height: 12),
+                              Center(child: SizedBox(width: 260, child: _buildUiSignatory('CHIEF, FIRE SAFETY ENFORCEMENT SECTION/UNIT', model.fireMarshalName))),
+                              const SizedBox(height: 18),
+
+                              const Center(child: Text('APPROVAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: colorTextPrimary))),
+                              const SizedBox(height: 12),
+                              Center(child: SizedBox(width: 260, child: _buildUiSignatory('CITY / MUNICIPAL FIRE MARSHAL', 'CINSP BFP Fire Marshal'))),
                               const SizedBox(height: 20),
 
-                              const Center(child: Text('RECOMMEND APPROVAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: colorTextPrimary))),
-                              const SizedBox(height: 14),
-                              Center(child: SizedBox(width: 280, child: _buildUiSignatory('CHIEF, FIRE SAFETY ENFORCEMENT SECTION/UNIT', model.fireMarshalName))),
-                              const SizedBox(height: 20),
-
-                              const Center(child: Text('APPROVAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: colorTextPrimary))),
-                              const SizedBox(height: 14),
-                              Center(child: SizedBox(width: 280, child: _buildUiSignatory('CITY / MUNICIPAL FIRE MARSHAL', 'CINSP BFP Fire Marshal'))),
+                              // Bottom Page Indicator Badge
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.layers_outlined, size: 13, color: Color(0xFF64748B)),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Page 1 of 1 • Full 10-Page Document via Export PDF',
+                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1232,21 +1345,21 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   Widget _buildFormHeader() {
     return Column(
       children: [
-        const Text('Republic of the Philippines', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextPrimary)),
-        const Text('Department of the Interior and Local Government', style: TextStyle(fontSize: 10, color: Color(0xFF475569))),
-        const Text('BUREAU OF FIRE PROTECTION', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colorPrimary, letterSpacing: 0.5)),
-        const Text('(LINGAYEN FIRE STATION - PANGASINAN)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorAccent)),
+        const Text('Republic of the Philippines', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorTextPrimary)),
+        const Text('Department of the Interior and Local Government', style: TextStyle(fontSize: 9.5, color: Color(0xFF475569))),
+        const Text('BUREAU OF FIRE PROTECTION', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorPrimary, letterSpacing: 0.5)),
+        const Text('(LINGAYEN FIRE STATION - PANGASINAN)', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorAccent)),
         const SizedBox(height: 6),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: const [
-            Text('BFP-QSF-FSED-061 Rev. ØØ (06.17.22)', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
-            Text('Official Form 061 Checklist', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
+            Text('BFP-QSF-FSED-061 Rev. ØØ (06.17.22)', style: TextStyle(fontSize: 8.5, color: Color(0xFF64748B))),
+            Text('Official Form 061', style: TextStyle(fontSize: 8.5, color: Color(0xFF64748B))),
           ],
         ),
-        const Divider(height: 12, color: colorBorder),
-        const SizedBox(height: 4),
-        const Text('FIRE SAFETY INSPECTION CHECKLIST', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorPrimary, letterSpacing: 0.5)),
+        const Divider(height: 10, color: colorBorder),
+        const SizedBox(height: 2),
+        const Text('FIRE SAFETY INSPECTION CHECKLIST', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorPrimary, letterSpacing: 0.5)),
       ],
     );
   }
@@ -1254,36 +1367,37 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   Widget _buildFormSectionTitle(String title) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 8, bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      margin: const EdgeInsets.only(top: 6, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       color: const Color(0xFFE2E8F0),
       child: Text(
         title,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorPrimary),
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorPrimary),
       ),
     );
   }
 
   Widget _buildFormLine(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
           SizedBox(
-            width: 210,
-            child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextPrimary)),
+            width: 170,
+            child: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorTextPrimary)),
           ),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.only(bottom: 1.5),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFF475569), width: 0.8)),
               ),
               child: Text(
                 value.isNotEmpty ? value : '________________________________________',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -1294,13 +1408,13 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
   Widget _buildFormCheckbox(bool isChecked, String label) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(isChecked ? '[ ✓ ]  ' : '[   ]  ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorPrimary)),
+          Text(isChecked ? '[ ✓ ]  ' : '[   ]  ', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorPrimary)),
           Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 11, color: colorTextPrimary)),
+            child: Text(label, style: const TextStyle(fontSize: 10.5, color: colorTextPrimary)),
           ),
         ],
       ),
@@ -1310,17 +1424,20 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   Widget _buildUiSignatory(String title, String name) {
     return Column(
       children: [
-        Container(height: 1, color: colorTextPrimary, width: 160),
+        Container(height: 1, color: colorTextPrimary, width: 140),
         const SizedBox(height: 3),
         Text(
           name.isNotEmpty ? name : 'Signature',
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorTextPrimary),
+          style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorTextPrimary),
           textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
         ),
         Text(
           title,
-          style: const TextStyle(fontSize: 8.5, color: Color(0xFF64748B)),
+          style: const TextStyle(fontSize: 8, color: Color(0xFF64748B)),
           textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

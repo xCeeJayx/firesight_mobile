@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/offline_sync_service.dart';
 import 'commercial_inspection_form_screen.dart';
 import 'view_inspection_form_dialog.dart';
 
@@ -33,19 +34,41 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
   void initState() {
     super.initState();
     _refreshData();
+    OfflineSyncService().pendingCountNotifier.addListener(_refreshData);
+  }
+
+  @override
+  void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_refreshData);
+    super.dispose();
   }
 
   void _refreshData() {
-    setState(() {
-      _assignedInspectionsFuture = _fetchTodaySchedule();
-      _kpiMetricsFuture = _fetchKpiMetrics();
-    });
+    if (mounted) {
+      setState(() {
+        _assignedInspectionsFuture = _fetchTodaySchedule();
+        _kpiMetricsFuture = _fetchKpiMetrics();
+      });
+    }
   }
 
   Future<Map<String, int>> _fetchKpiMetrics() async {
     final user = Supabase.instance.client.auth.currentUser;
     final userId = user?.id;
 
+    int scheduledToday = 0;
+    int completed = 0;
+    int pendingDeficiencies = 0;
+
+    // 1. Account for offline pending items
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
+      for (var item in offline) {
+        scheduledToday++;
+      }
+    } catch (_) {}
+
+    // 2. Fetch remote metrics from Supabase
     try {
       final client = Supabase.instance.client;
       var query = client.from('inspections').select('overall_status, recommendation, compliance_status, date_inspected');
@@ -54,10 +77,6 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
       }
 
       final res = await query;
-      int scheduledToday = 0;
-      int completed = 0;
-      int pendingDeficiencies = 0;
-
       final todayStr = DateTime.now().toIso8601String().split('T').first;
 
       for (var item in res) {
@@ -65,7 +84,7 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
         final rec = (item['recommendation'] ?? item['compliance_status'] ?? '').toString().toUpperCase();
         final dateInspected = (item['date_inspected'] ?? '').toString();
 
-        if (dateInspected.startsWith(todayStr) || st == 'pending' || st == 'in progress' || st == 'assigned') {
+        if (dateInspected.startsWith(todayStr) || st == 'pending' || st == 'in progress' || st == 'assigned' || st == 'pending sync') {
           scheduledToday++;
         }
         if (st == 'completed' || st == 'passed' || st == 'inspected') {
@@ -82,7 +101,7 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
         'pendingDeficiencies': pendingDeficiencies,
       };
     } catch (_) {
-      return {'scheduledToday': 0, 'completed': 0, 'pendingDeficiencies': 0};
+      return {'scheduledToday': scheduledToday, 'completed': completed, 'pendingDeficiencies': pendingDeficiencies};
     }
   }
 
@@ -90,6 +109,17 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
     final user = Supabase.instance.client.auth.currentUser;
     final userId = user?.id;
 
+    List<Map<String, dynamic>> items = [];
+
+    // 1. Read offline pending items
+    try {
+      final offlineItems = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
+      items.addAll(offlineItems);
+    } catch (e) {
+      debugPrint('Error reading offline dashboard items: $e');
+    }
+
+    // 2. Read remote Supabase items
     try {
       final client = Supabase.instance.client;
       var query = client.from('inspections').select();
@@ -97,14 +127,21 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
         query = query.eq('inspector_id', userId);
       }
       final res = await query.order('created_at', ascending: false).limit(30);
-      final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(res);
-      return items.where((item) {
-        final st = (item['overall_status'] ?? '').toString().toLowerCase();
-        return st != 'completed' && st != 'passed';
-      }).toList();
-    } catch (_) {
-      return [];
-    }
+      final List<Map<String, dynamic>> remote = List<Map<String, dynamic>>.from(res);
+
+      final Set<String> existingIds = items.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          final st = (r['overall_status'] ?? '').toString().toLowerCase();
+          if (st != 'completed' && st != 'passed') {
+            items.add(r);
+          }
+        }
+      }
+    } catch (_) {}
+
+    return items;
   }
 
   void _launchForm([Map<String, dynamic>? item]) {
@@ -341,8 +378,8 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
             final ioNo = item['inspection_order_no'] ?? 'N/A';
             final status = item['overall_status'] ?? 'Pending';
             final recommendation = item['recommendation'] ?? item['compliance_status'] ?? 'Scheduled';
-
             final isCompleted = status.toString().toLowerCase() == 'completed' || status.toString().toLowerCase() == 'passed';
+            final bool isOfflinePending = status.toString().toLowerCase() == 'pending sync' || item['_is_offline_pending'] == true;
 
             return Container(
               padding: const EdgeInsets.all(16),
@@ -379,16 +416,26 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _getStatusBgColor(status),
+                          color: isOfflinePending ? const Color(0xFFFEF3C7) : _getStatusBgColor(status),
                           borderRadius: BorderRadius.circular(12),
+                          border: isOfflinePending ? Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)) : null,
                         ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: _getStatusTextColor(status),
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isOfflinePending) ...[
+                              const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              isOfflinePending ? 'PENDING SYNC (OFFLINE)' : status.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isOfflinePending ? const Color(0xFFB45309) : _getStatusTextColor(status),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

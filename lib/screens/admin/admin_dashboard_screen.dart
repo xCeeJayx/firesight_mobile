@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/user_role.dart';
 import '../../services/auth_service.dart';
+import '../../services/offline_sync_service.dart';
 import '../../services/route_guard.dart';
 import '../../widgets/common/kpi_stat_card.dart';
 import 'user_management_screen.dart';
@@ -35,10 +36,12 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
   void initState() {
     super.initState();
     _refreshData();
+    OfflineSyncService().pendingCountNotifier.addListener(_refreshData);
   }
 
   @override
   void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_refreshData);
     _emailController.dispose();
     _passwordController.dispose();
     _fullNameController.dispose();
@@ -47,11 +50,13 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
   }
 
   void _refreshData() {
-    setState(() {
-      _dashboardMetricsFuture = _fetchMetrics();
-      _inspectionsFeedFuture = _fetchInspectionsFeed();
-      _criticalAlertsFuture = _fetchCriticalAlerts();
-    });
+    if (mounted) {
+      setState(() {
+        _dashboardMetricsFuture = _fetchMetrics();
+        _inspectionsFeedFuture = _fetchInspectionsFeed();
+        _criticalAlertsFuture = _fetchCriticalAlerts();
+      });
+    }
   }
 
   Future<Map<String, dynamic>> _fetchMetrics() async {
@@ -111,15 +116,31 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchInspectionsFeed() async {
+    List<Map<String, dynamic>> items = [];
+
+    // Read offline pending items
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
+      items.addAll(offline);
+    } catch (_) {}
+
     try {
       final response = await Supabase.instance.client
           .from('inspections')
           .select()
           .order('created_at', ascending: false)
           .limit(10);
-      return List<Map<String, dynamic>>.from(response);
+      final remote = List<Map<String, dynamic>>.from(response);
+      final Set<String> existingIds = items.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          items.add(r);
+        }
+      }
+      return items;
     } catch (_) {
-      return [];
+      return items;
     }
   }
 
@@ -717,6 +738,7 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
                 final String bName = item['business_name']?.toString() ?? 'Establishment';
                 final String status = item['compliance_status']?.toString() ?? item['overall_status']?.toString() ?? 'Passed';
                 final isPass = status.toLowerCase().contains('compliant') || status.toLowerCase().contains('pass');
+                final bool isOfflinePending = status.toLowerCase() == 'pending sync' || item['_is_offline_pending'] == true;
 
                 return InkWell(
                   onTap: () => _showInspectionDetailsModal(item),
@@ -758,11 +780,11 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Form 061 • Status: $status',
+                                isOfflinePending ? 'Form 061 • PENDING SYNC (OFFLINE)' : 'Form 061 • Status: $status',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                                  fontWeight: FontWeight.w500,
+                                  color: isOfflinePending ? const Color(0xFFB45309) : (isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],

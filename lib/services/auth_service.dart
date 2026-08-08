@@ -1,13 +1,24 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_role.dart';
+import 'offline_sync_service.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
 
-  final SupabaseClient _client = Supabase.instance.client;
+  SupabaseClient? get _client {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   UserRole _currentRole = UserRole.publicGuest;
   Map<String, dynamic>? _userProfile;
@@ -15,30 +26,101 @@ class AuthService extends ChangeNotifier {
 
   UserRole get currentRole => _currentRole;
   Map<String, dynamic>? get userProfile => _userProfile;
-  bool get isAuthenticated => _client.auth.currentUser != null && _currentRole != UserRole.publicGuest;
+  bool get isAuthenticated => _currentRole != UserRole.publicGuest;
 
-  void initialize() {
+  /// Keys for secure local storage caching
+  static const String _keyCachedRole = 'firesight_cached_role';
+  static const String _keyCachedProfile = 'firesight_cached_profile';
+  static const String _keyCachedUserId = 'firesight_cached_user_id';
+
+  Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
 
-    _client.auth.onAuthStateChange.listen((data) async {
+    // 1. Attempt restoring cached session & role for offline startup
+    await _restoreCachedSession();
+
+    // 2. Listen to Supabase auth state changes
+    _client?.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
       if (event == AuthChangeEvent.signedOut) {
-        if (_client.auth.currentUser == null) {
+        if (_client?.auth.currentUser == null) {
           _currentRole = UserRole.publicGuest;
           _userProfile = null;
+          await _clearCachedSession();
           notifyListeners();
         }
-      } else if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed || event == AuthChangeEvent.initialSession) {
+      } else if (event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.tokenRefreshed ||
+          event == AuthChangeEvent.initialSession) {
         await refreshUserProfile();
       }
     });
   }
 
+  /// Restore cached session and role from FlutterSecureStorage during offline startup
+  Future<void> _restoreCachedSession() async {
+    try {
+      final savedRoleStr = await _storage.read(key: _keyCachedRole);
+      final savedProfileStr = await _storage.read(key: _keyCachedProfile);
+
+      if (savedRoleStr != null && savedRoleStr.isNotEmpty) {
+        _currentRole = UserRoleExtension.fromString(savedRoleStr);
+      }
+
+      if (savedProfileStr != null && savedProfileStr.isNotEmpty) {
+        _userProfile = jsonDecode(savedProfileStr);
+      }
+
+      // If current Supabase user exists or cached session exists, retain role
+      if (_client?.auth.currentUser != null) {
+        await refreshUserProfile();
+      } else if (_currentRole != UserRole.publicGuest) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error restoring cached offline session: $e');
+    }
+  }
+
+  Future<void> _saveCachedSession(UserRole role, Map<String, dynamic> profile) async {
+    try {
+      await _storage.write(key: _keyCachedRole, value: role.toDbString());
+      await _storage.write(key: _keyCachedProfile, value: jsonEncode(profile));
+      if (profile['id'] != null) {
+        await _storage.write(key: _keyCachedUserId, value: profile['id'].toString());
+      }
+    } catch (e) {
+      debugPrint('Error saving cached session: $e');
+    }
+  }
+
+  Future<void> _clearCachedSession() async {
+    try {
+      await _storage.delete(key: _keyCachedRole);
+      await _storage.delete(key: _keyCachedProfile);
+      await _storage.delete(key: _keyCachedUserId);
+    } catch (e) {
+      debugPrint('Error clearing cached session: $e');
+    }
+  }
+
   /// Refreshes current user's profile and active role from Supabase 'profiles'
   Future<UserRole> refreshUserProfile() async {
-    final user = _client.auth.currentUser;
+    final client = _client;
+    if (client == null) {
+      if (_userProfile != null && _currentRole != UserRole.publicGuest) {
+        return _currentRole;
+      }
+      return _currentRole;
+    }
+
+    final user = client.auth.currentUser;
     if (user == null) {
+      // If offline but we have cached profile, retain cached profile
+      if (_userProfile != null && _currentRole != UserRole.publicGuest) {
+        return _currentRole;
+      }
       _currentRole = UserRole.publicGuest;
       _userProfile = null;
       notifyListeners();
@@ -61,7 +143,7 @@ class AuthService extends ChangeNotifier {
 
     try {
       // 1. Try querying profile by exact auth user ID
-      var profileData = await _client
+      var profileData = await client
           .from('profiles')
           .select()
           .eq('id', user.id)
@@ -69,7 +151,7 @@ class AuthService extends ChangeNotifier {
 
       // 2. If not found by ID, query profile by role from Supabase profiles table
       if (profileData == null) {
-        profileData = await _client
+        profileData = await client
             .from('profiles')
             .select()
             .eq('role', inferredRole.toDbString())
@@ -83,7 +165,7 @@ class AuthService extends ChangeNotifier {
         // Update profile ID in Supabase to match active auth user ID
         if (profileData['id'] != user.id) {
           try {
-            await _client.from('profiles').update({'id': user.id}).eq('role', inferredRole.toDbString());
+            await client.from('profiles').update({'id': user.id}).eq('role', inferredRole.toDbString());
             _userProfile!['id'] = user.id;
           } catch (e) {
             debugPrint('Note linking profile ID: $e');
@@ -104,7 +186,7 @@ class AuthService extends ChangeNotifier {
 
         // Provision profile record in Supabase profiles table
         try {
-          await _client.from('profiles').upsert({
+          await client.from('profiles').upsert({
             'id': user.id,
             'role': inferredRole.toDbString(),
             'full_name': _userProfile!['full_name'],
@@ -114,23 +196,23 @@ class AuthService extends ChangeNotifier {
           debugPrint('Profile auto-creation note: $upsertError');
         }
       }
+
+      // Cache the refreshed profile locally for offline startup
+      if (_userProfile != null) {
+        await _saveCachedSession(_currentRole, _userProfile!);
+      }
     } catch (e) {
-      debugPrint('Error fetching user profile: $e');
-      _currentRole = inferredRole;
-      _userProfile = {
-        'id': user.id,
-        'role': inferredRole.toDbString(),
-        'full_name': inferredRole == UserRole.stationOfficer
-            ? 'Station Officer'
-            : inferredRole == UserRole.fireInspector
-                ? 'Fire Inspector'
-                : 'Community Risk Officer',
-        'badge_number': inferredRole == UserRole.stationOfficer
-            ? 'BFP-2188'
-            : inferredRole == UserRole.fireInspector
-                ? 'BFP-9531'
-                : 'BFP-5153',
-      };
+      debugPrint('Network error fetching profile (Offline Fallback): $e');
+      // If we already have a cached profile, use it
+      if (_userProfile == null) {
+        _currentRole = inferredRole;
+        _userProfile = {
+          'id': user.id,
+          'role': inferredRole.toDbString(),
+          'full_name': user.email ?? inferredRole.displayName,
+          'badge_number': 'BFP-OFFLINE',
+        };
+      }
     }
 
     notifyListeners();
@@ -142,7 +224,11 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    final response = await _client.auth.signInWithPassword(
+    final client = _client;
+    if (client == null) {
+      throw const AuthException('Network service unavailable');
+    }
+    final response = await client.auth.signInWithPassword(
       email: email,
       password: password,
     );
@@ -159,16 +245,23 @@ class AuthService extends ChangeNotifier {
   void setGuestMode() {
     _currentRole = UserRole.publicGuest;
     _userProfile = null;
+    _clearCachedSession();
     notifyListeners();
   }
 
   /// Sign out current user
   Future<void> signOut() async {
-    if (_client.auth.currentUser != null) {
-      await _client.auth.signOut();
+    final client = _client;
+    if (client?.auth.currentUser != null) {
+      try {
+        await client?.auth.signOut();
+      } catch (e) {
+        debugPrint('Sign out note: $e');
+      }
     }
     _currentRole = UserRole.publicGuest;
     _userProfile = null;
+    await _clearCachedSession();
     notifyListeners();
   }
 
@@ -180,6 +273,10 @@ class AuthService extends ChangeNotifier {
     required String badgeNumber,
     required UserRole role,
   }) async {
+    final client = _client;
+    if (client == null) {
+      return {'success': false, 'error': 'Database client not connected.'};
+    }
     if (_currentRole != UserRole.stationOfficer) {
       return {'success': false, 'error': 'Only Station Officers can create internal personnel accounts.'};
     }
@@ -189,7 +286,7 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final response = await _client.auth.signUp(
+      final response = await client.auth.signUp(
         email: email,
         password: password,
         data: {
@@ -202,7 +299,7 @@ class AuthService extends ChangeNotifier {
       final newUser = response.user;
       if (newUser != null) {
         // Upsert into profiles table
-        await _client.from('profiles').upsert({
+        await client.from('profiles').upsert({
           'id': newUser.id,
           'role': role.toDbString(),
           'full_name': fullName,
@@ -235,6 +332,10 @@ class AuthService extends ChangeNotifier {
     UserRole? role,
     bool? isActive,
   }) async {
+    final client = _client;
+    if (client == null) {
+      return {'success': false, 'error': 'Database client not connected.'};
+    }
     if (_currentRole != UserRole.stationOfficer) {
       return {'success': false, 'error': 'Unauthorized: Only Station Officers can edit personnel profiles.'};
     }
@@ -248,7 +349,7 @@ class AuthService extends ChangeNotifier {
       if (role != null) updates['role'] = role.toDbString();
       if (isActive != null) updates['is_active'] = isActive;
 
-      await _client.from('profiles').update(updates).eq('id', userId);
+      await client.from('profiles').update(updates).eq('id', userId);
 
       await logAuditAction(
         actionType: 'USER_ROLE_UPDATED',
@@ -269,12 +370,16 @@ class AuthService extends ChangeNotifier {
     required bool isActive,
     required String targetName,
   }) async {
+    final client = _client;
+    if (client == null) {
+      return {'success': false, 'error': 'Database client not connected.'};
+    }
     if (_currentRole != UserRole.stationOfficer) {
       return {'success': false, 'error': 'Unauthorized: Only Station Officers can toggle account status.'};
     }
 
     try {
-      await _client.from('profiles').update({
+      await client.from('profiles').update({
         'is_active': isActive,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
@@ -297,8 +402,10 @@ class AuthService extends ChangeNotifier {
     String? searchQuery,
     String? roleFilter,
   }) async {
+    final client = _client;
+    if (client == null) return [];
     try {
-      final response = await _client.from('profiles').select().order('created_at', ascending: false);
+      final response = await client.from('profiles').select().order('created_at', ascending: false);
       List<Map<String, dynamic>> profiles = List<Map<String, dynamic>>.from(response);
 
       if (roleFilter != null && roleFilter != 'All' && roleFilter.isNotEmpty) {
@@ -322,13 +429,14 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Write entry to Supabase audit_logs table
+  /// Write entry to Supabase audit_logs table (or local queue when offline)
   Future<void> logAuditAction({
     required String actionType,
     required String targetEntity,
     String? details,
   }) async {
-    final user = _client.auth.currentUser;
+    final client = _client;
+    final user = client?.auth.currentUser;
     final performerName = _userProfile?['full_name'] ?? user?.email ?? 'System Officer';
     final performerRole = _currentRole.toDbString();
 
@@ -343,9 +451,16 @@ class AuthService extends ChangeNotifier {
     };
 
     try {
-      await _client.from('audit_logs').insert(logData);
+      if (client == null) throw Exception('Client offline');
+      await client.from('audit_logs').insert(logData);
     } catch (e) {
-      debugPrint('Audit logging note: $e');
+      debugPrint('Audit logging online note (Queueing locally for sync): $e');
+      // Queue offline
+      try {
+        await OfflineSyncService().queueForSync(targetTable: 'audit_logs', payload: logData);
+      } catch (queueErr) {
+        debugPrint('Audit offline queueing note: $queueErr');
+      }
     }
   }
 
@@ -354,8 +469,10 @@ class AuthService extends ChangeNotifier {
     String? searchQuery,
     String? actionFilter,
   }) async {
+    final client = _client;
+    if (client == null) return [];
     try {
-      final response = await _client
+      final response = await client
           .from('audit_logs')
           .select()
           .order('created_at', ascending: false)
@@ -385,5 +502,3 @@ class AuthService extends ChangeNotifier {
     }
   }
 }
-
-

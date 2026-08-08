@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import 'view_inspection_form_dialog.dart';
 
+import '../../services/offline_sync_service.dart';
+
 class InspectorReportsScreen extends StatefulWidget {
   const InspectorReportsScreen({super.key});
 
@@ -20,28 +22,50 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
   static const Color colorBorder = Color(0xFFE2E8F0);
   static const Color colorSuccess = Color(0xFF16A34A);
   static const Color colorWarning = Color(0xFFD97706);
+  static const Color colorInfo = Color(0xFF0284C7);
+  static const Color colorError = Color(0xFFDC2626);
   static const Color colorDanger = Color(0xFFDC2626);
+
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedActionFilter = 'All';
+  bool _isExporting = false;
 
   late Future<List<Map<String, dynamic>>> _reportsFuture;
   late Future<Map<String, int>> _reportStatsFuture;
-  bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
     _refreshReports();
+    OfflineSyncService().pendingCountNotifier.addListener(_refreshReports);
+  }
+
+  @override
+  void dispose() {
+    OfflineSyncService().pendingCountNotifier.removeListener(_refreshReports);
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _refreshReports() {
-    setState(() {
-      _reportsFuture = _fetchAfterInspectionReports();
-      _reportStatsFuture = _fetchReportStats();
-    });
+    if (mounted) {
+      setState(() {
+        _reportsFuture = _fetchAfterInspectionReports();
+        _reportStatsFuture = _fetchReportStats();
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchAfterInspectionReports() async {
     final user = Supabase.instance.client.auth.currentUser;
     final userId = user?.id;
+
+    List<Map<String, dynamic>> items = [];
+
+    try {
+      final offline = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
+      items.addAll(offline);
+    } catch (_) {}
 
     try {
       final client = Supabase.instance.client;
@@ -50,10 +74,18 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
         query = query.eq('inspector_id', userId);
       }
       final res = await query.order('created_at', ascending: false).limit(30);
-      return List<Map<String, dynamic>>.from(res);
+      final remote = List<Map<String, dynamic>>.from(res);
+      final Set<String> existingIds = items.map((i) => (i['id'] ?? '').toString()).toSet();
+      for (var r in remote) {
+        final rId = (r['id'] ?? '').toString();
+        if (!existingIds.contains(rId)) {
+          items.add(r);
+        }
+      }
+      return items;
     } catch (e) {
       debugPrint('Error fetching AIR reports: $e');
-      return [];
+      return items;
     }
   }
 
@@ -348,6 +380,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
             final ioNo = r['inspection_order_no'] ?? 'N/A';
             final rec = r['recommendation'] ?? r['compliance_status'] ?? 'Inspected';
             final dateStr = (r['date_inspected'] ?? r['created_at'] ?? '').toString().split('T').first;
+            final bool isOfflinePending = (r['overall_status'] ?? '').toString().toLowerCase() == 'pending sync' || r['_is_offline_pending'] == true;
 
             return InkWell(
               onTap: () => _showAirReportModal(r),
@@ -386,13 +419,39 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
                             style: const TextStyle(fontSize: 11, color: colorTextSecondary),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            'Action: $rec',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: _getRecColor(rec),
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                'Action: $rec',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getRecColor(rec),
+                                ),
+                              ),
+                              if (isOfflinePending) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.sync_problem_rounded, size: 10, color: Color(0xFFB45309)),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'PENDING SYNC',
+                                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
