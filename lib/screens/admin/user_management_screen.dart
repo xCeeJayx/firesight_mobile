@@ -588,27 +588,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshUsers(),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Search Bar & Filter Header
-              _buildSearchHeader(),
-              const SizedBox(height: 16),
-
-              // Role Tabs
-              _buildRoleTabs(),
-              const SizedBox(height: 16),
-
-              // User Cards List
-              _buildUserList(),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Search Header & Role Tabs (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSearchHeader(),
+                const SizedBox(height: 12),
+                _buildRoleTabs(),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Personnel Cards List
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => _refreshUsers(),
+              color: const Color(0xFFEA580C),
+              child: _buildUserList(scrollable: true),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -746,7 +750,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
-  Widget _buildUserList() {
+  Widget _buildUserList({bool scrollable = false}) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _usersFuture,
       builder: (context, snapshot) {
@@ -761,7 +765,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
         final users = snapshot.data ?? [];
         if (users.isEmpty) {
-          return Container(
+          final emptyWidget = Container(
             width: double.infinity,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -770,6 +774,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.person_search_outlined, size: 48, color: Color(0xFF94A3B8)),
                 SizedBox(height: 12),
@@ -785,11 +790,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               ],
             ),
           );
+
+          if (scrollable) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: emptyWidget,
+            );
+          }
+          return emptyWidget;
         }
 
         return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: !scrollable,
+          physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+          padding: scrollable ? const EdgeInsets.fromLTRB(16, 0, 16, 24) : EdgeInsets.zero,
           itemCount: users.length,
           separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {

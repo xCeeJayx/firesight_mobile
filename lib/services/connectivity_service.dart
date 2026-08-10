@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'offline_sync_service.dart';
 
@@ -73,16 +74,18 @@ class ConnectivityService {
         return false;
       }
 
-      // Check real internet reachability with quick DNS lookup
-      try {
-        final lookup = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
-        if (lookup.isNotEmpty && lookup[0].rawAddress.isNotEmpty) {
-          _isOnline = true;
-          isOnlineNotifier.value = true;
-          return true;
+      // Check real internet reachability with quick DNS lookup (non-web only)
+      if (!kIsWeb) {
+        try {
+          final lookup = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
+          if (lookup.isNotEmpty && lookup[0].rawAddress.isNotEmpty) {
+            _isOnline = true;
+            isOnlineNotifier.value = true;
+            return true;
+          }
+        } catch (_) {
+          // Fallback: If lookup timed out, trust basic connection state
         }
-      } catch (_) {
-        // Fallback: If lookup timed out, trust basic connection state
       }
 
       _isOnline = isBasicOnline;

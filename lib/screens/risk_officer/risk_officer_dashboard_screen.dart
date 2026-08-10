@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/offline_sync_service.dart';
-import 'barangay_risk_survey_screen.dart';
-import 'house_to_house_checklist_screen.dart';
+import '../../services/emergency_service.dart';
+import '../../widgets/emergency/emergency_reports_feed.dart';
 
 class CommunityRiskOfficerDashboard extends StatefulWidget {
   final Function(int)? onNavigateTab;
@@ -25,8 +25,6 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
   int _assessedBarangaysCount = 0;
   int _totalH2HInspectionsCount = 0;
   int _highRiskZonesCount = 0;
-
-  List<Map<String, dynamic>> _recentSurveys = [];
 
   @override
   void initState() {
@@ -53,6 +51,7 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
   }
 
   Future<void> _fetchLiveMetricsAndFeed() async {
+    EmergencyService().fetchReports();
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -124,7 +123,6 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
 
     if (mounted) {
       setState(() {
-        _recentSurveys = allSurveys.take(10).toList();
         _assessedBarangaysCount = distinctAssessedBarangays.length;
         _totalH2HInspectionsCount = h2hCount;
         _highRiskZonesCount = highRiskCount;
@@ -133,79 +131,45 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
     }
   }
 
-  Color _getRiskColor(String risk) {
-    if (risk.toLowerCase().contains('high')) {
-      return const Color(0xFFDC2626);
-    } else if (risk.toLowerCase().contains('med')) {
-      return const Color(0xFFD97706);
-    } else {
-      return const Color(0xFF16A34A);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: RefreshIndicator(
-        onRefresh: _fetchLiveMetricsAndFeed,
-        color: const Color(0xFFEA580C),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-
-              // Live KPI Grid
-              const Text(
-                'OLP Operational Risk Metrics',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Header & Overview Cards (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'OLP Operational Risk Metrics',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _buildLiveKpiGrid(),
-              const SizedBox(height: 20),
-
-              // Quick Action Bar (H2H & Barangay triggers)
-              _buildQuickActionBar(),
-              const SizedBox(height: 20),
-
-              // Live Stream Header & Feed List
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Recent OLP Risk Inspections',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      if (widget.onNavigateTab != null) {
-                        widget.onNavigateTab!(4); // Jump to Analytics & Reports
-                      }
-                    },
-                    icon: const Icon(Icons.analytics_outlined, size: 16, color: Color(0xFFEA580C)),
-                    label: const Text(
-                      'Analytics Hub',
-                      style: TextStyle(color: Color(0xFFEA580C), fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _buildRecentSurveysStream(),
-            ],
+                const SizedBox(height: 10),
+                _buildLiveKpiGrid(),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Live Emergency Reports Feed
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _fetchLiveMetricsAndFeed,
+              color: const Color(0xFFEA580C),
+              child: const EmergencyReportsFeed(
+                isExpanded: true,
+                padding: EdgeInsets.symmetric(horizontal: 16),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -251,14 +215,14 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -271,6 +235,8 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
             const SizedBox(height: 10),
             Text(
               _isLoading ? '...' : value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -300,242 +266,6 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildQuickActionBar() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'OLP Survey Triggers',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white70,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HouseToHouseChecklistScreen()),
-                    ).then((_) => _fetchLiveMetricsAndFeed());
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEA580C),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.home_work_outlined, size: 18),
-                  label: const Text(
-                    'New H2H Check',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const BarangayRiskSurveyScreen()),
-                    ).then((_) => _fetchLiveMetricsAndFeed());
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white30),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.location_city_outlined, size: 18),
-                  label: const Text(
-                    'Barangay Profile',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentSurveysStream() {
-    if (_isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: CircularProgressIndicator(color: Color(0xFFEA580C)),
-        ),
-      );
-    }
-
-    if (_recentSurveys.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Column(
-          children: const [
-            Icon(Icons.rate_review_outlined, size: 36, color: Color(0xFF94A3B8)),
-            SizedBox(height: 8),
-            Text(
-              'No recent OLP surveys logged',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _recentSurveys.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final survey = _recentSurveys[index];
-        final surveyType = survey['survey_type']?.toString() ?? survey['checklist_type']?.toString() ?? 'barangay';
-        final isH2H = surveyType == 'house_to_house';
-
-        final titleText = isH2H
-            ? (survey['occupant_name'] ?? survey['survey_data']?['occupantName'] ?? 'Household Inspection').toString()
-            : 'Brgy. ${(survey['barangay_name'] ?? survey['barangay'] ?? 'Poblacion')}';
-
-        final subtitleText = isH2H
-            ? 'H2H Household • Brgy. ${(survey['barangay_name'] ?? survey['barangay'] ?? '')}'
-            : 'Barangay CFPP Assessment';
-
-        final risk = (survey['risk_level'] ?? survey['vulnerability_rating'] ?? 'Medium').toString();
-        final riskColor = _getRiskColor(risk);
-
-        final dateStr = survey['created_at']?.toString() ?? survey['date_inspected']?.toString();
-        final date = dateStr != null
-            ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? 'N/A'
-            : 'N/A';
-        final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
-
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: isH2H ? const Color(0xFFEA580C).withOpacity(0.1) : const Color(0xFF0F172A).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isH2H ? Icons.home_work_outlined : Icons.domain_outlined,
-                  color: isH2H ? const Color(0xFFEA580C) : const Color(0xFF0F172A),
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: isH2H ? const Color(0xFFEA580C) : const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            isH2H ? 'H2H' : 'BARANGAY',
-                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            titleText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$subtitleText • $date',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isOfflinePending) ...[
-                      const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
-                      style: TextStyle(
-                        color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

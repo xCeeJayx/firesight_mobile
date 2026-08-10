@@ -7,9 +7,9 @@ class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
 
   // BFP Lingayen Official Hotline numbers
-  static const String bfpHotlineLandline = '(075) 632-3023';
-  static const String bfpHotlineMobile = '0917-123-4567';
-  static const String bfpEmergencyNumber = '911';
+  static const String bfpHotlineLandline = '0917-186-1611';
+  static const String bfpHotlineMobile = '0917-186-1611';
+  static const String bfpEmergencyNumber = '09171861611';
 
   // Complete list of all 32 Lingayen Barangays
   static const List<String> lingayenBarangays = [
@@ -48,9 +48,9 @@ class SupabaseService {
   ];
 
   /// Launch phone call to BFP Lingayen Hotline
-  static Future<bool> callBfpHotline({String phoneNumber = '0756323023'}) async {
+  static Future<bool> callBfpHotline({String phoneNumber = '09171861611'}) async {
     final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
-    final Uri uri = Uri(scheme: 'tel', path: cleanNumber.isNotEmpty ? cleanNumber : '0756323023');
+    final Uri uri = Uri(scheme: 'tel', path: cleanNumber.isNotEmpty ? cleanNumber : '09171861611');
     try {
       if (await canLaunchUrl(uri)) {
         return await launchUrl(uri);

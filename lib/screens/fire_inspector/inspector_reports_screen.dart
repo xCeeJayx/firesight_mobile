@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/air_summary_pdf_service.dart';
 import 'view_inspection_form_dialog.dart';
 
 import '../../services/offline_sync_service.dart';
@@ -132,16 +133,27 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
     setState(() => _isExporting = true);
 
     try {
+      final reports = await _reportsFuture;
+      final stats = await _reportStatsFuture;
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      final inspectorName = currentUser?.userMetadata?['name'] ?? currentUser?.userMetadata?['full_name'] ?? currentUser?.email?.split('@').first ?? 'Fire Safety Inspector';
+
+      await AirSummaryPdfService.generateAndPrintAirSummaryPdf(
+        reports: reports,
+        stats: stats,
+        inspectorName: inspectorName,
+      );
+
       await AuthService().logAuditAction(
         actionType: 'REPORT_EXPORTED',
         targetEntity: 'Station Officer Summary Log',
-        details: 'Exported Commercial After-Inspection Reports (AIR) summary batch for Station Officer review.',
+        details: 'Exported Commercial After-Inspection Reports (AIR) summary batch (${reports.length} records) for Station Officer review.',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('After-Inspection Summary Log Exported for Station Officer Review!'),
+            content: Text('AIR Summary Log generated & exported successfully!'),
             backgroundColor: colorSuccess,
             behavior: SnackBarBehavior.floating,
           ),
@@ -150,7 +162,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export note: $e'), backgroundColor: colorDanger),
+          SnackBar(content: Text('Export error: $e'), backgroundColor: colorDanger),
         );
       }
     } finally {
@@ -171,41 +183,33 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: colorCanvas,
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshReports(),
-        color: colorAccent,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Card
-              _buildHeaderCard(),
-              const SizedBox(height: 16),
-
-              // Summary Stats
-              _buildStatsRow(),
-              const SizedBox(height: 20),
-
-              // Export Button Section
-              _buildExportBar(),
-              const SizedBox(height: 20),
-
-              // Reports List
-              const Text(
-                'Submitted After-Inspection Reports (AIR)',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: colorTextPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildReportsList(),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Header, Stats & Export Bar (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderCard(),
+                const SizedBox(height: 12),
+                _buildStatsRow(),
+                const SizedBox(height: 12),
+                _buildExportBar(),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Reports List
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => _refreshReports(),
+              color: colorAccent,
+              child: _buildReportsList(scrollable: true),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -328,7 +332,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
     );
   }
 
-  Widget _buildReportsList() {
+  Widget _buildReportsList({bool scrollable = false}) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _reportsFuture,
       builder: (context, snapshot) {
@@ -343,7 +347,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
 
         final reports = snapshot.data ?? [];
         if (reports.isEmpty) {
-          return Container(
+          final emptyWidget = Container(
             width: double.infinity,
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
@@ -352,6 +356,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
               border: Border.all(color: colorBorder),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.assignment_outlined, size: 40, color: colorTextSecondary),
                 SizedBox(height: 10),
@@ -367,97 +372,129 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
               ],
             ),
           );
+
+          if (scrollable) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: emptyWidget,
+            );
+          }
+          return emptyWidget;
         }
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: reports.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 10),
+        return ListView.builder(
+          shrinkWrap: !scrollable,
+          physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+          padding: scrollable ? const EdgeInsets.fromLTRB(16, 8, 16, 24) : EdgeInsets.zero,
+          itemCount: reports.length + 1,
           itemBuilder: (context, index) {
-            final r = reports[index];
+            if (index == 0) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text(
+                  'Submitted After-Inspection Reports (AIR)',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: colorTextPrimary,
+                  ),
+                ),
+              );
+            }
+
+            final r = reports[index - 1];
             final bName = r['business_name'] ?? 'Commercial Establishment';
             final ioNo = r['inspection_order_no'] ?? 'N/A';
             final rec = r['recommendation'] ?? r['compliance_status'] ?? 'Inspected';
             final dateStr = (r['date_inspected'] ?? r['created_at'] ?? '').toString().split('T').first;
             final bool isOfflinePending = (r['overall_status'] ?? '').toString().toLowerCase() == 'pending sync' || r['_is_offline_pending'] == true;
 
-            return InkWell(
-              onTap: () => _showAirReportModal(r),
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: colorSurface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: colorBorder),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: InkWell(
+                onTap: () => _showAirReportModal(r),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: colorSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.picture_as_pdf_outlined, color: colorAccent, size: 24),
                       ),
-                      child: const Icon(Icons.picture_as_pdf_outlined, color: colorAccent, size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            bName,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorTextPrimary),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'IO: $ioNo | Date: $dateStr',
-                            style: const TextStyle(fontSize: 11, color: colorTextSecondary),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                'Action: $rec',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: _getRecColor(rec),
-                                ),
-                              ),
-                              if (isOfflinePending) ...[
-                                const SizedBox(width: 8),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              bName,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorTextPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'IO #$ioNo • $dateStr',
+                              style: const TextStyle(fontSize: 12, color: colorTextSecondary),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)),
+                                    color: _getRecColor(rec).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.sync_problem_rounded, size: 10, color: Color(0xFFB45309)),
-                                      SizedBox(width: 3),
-                                      Text(
-                                        'PENDING SYNC',
-                                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                                      ),
-                                    ],
+                                  child: Text(
+                                    rec.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: _getRecColor(rec),
+                                    ),
                                   ),
                                 ),
+                                if (isOfflinePending) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: colorWarning.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.cloud_upload_outlined, size: 10, color: colorWarning),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Pending Sync',
+                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorWarning),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right_outlined, color: colorTextSecondary, size: 20),
-                  ],
+                      const Icon(Icons.chevron_right_rounded, color: colorTextSecondary, size: 20),
+                    ],
+                  ),
                 ),
               ),
             );

@@ -3,12 +3,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
+import 'services/db_initializer.dart';
+import 'services/emergency_service.dart';
 import 'services/offline_sync_service.dart';
 import 'services/route_guard.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize SQLite database factory across all platforms (Web, Desktop, Mobile)
+  initializeDatabaseFactory();
 
   // Supabase standard local storage initialization
   await Supabase.initialize(
@@ -24,6 +29,9 @@ Future<void> main() async {
 
   // Initialize Auth & restore cached offline profile
   await AuthService().initialize();
+
+  // Initialize Emergency Report real-time subscription & state
+  await EmergencyService().initialize();
 
   runApp(const FireSightApp());
 }
@@ -42,6 +50,7 @@ class FireSightApp extends StatelessWidget {
       title: 'FireSight Mobile',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      navigatorKey: EmergencyService.navigatorKey,
       scaffoldMessengerKey: ConnectivityService.scaffoldMessengerKey,
       initialRoute: initialRoute,
       onGenerateInitialRoutes: (String initialRouteName) {

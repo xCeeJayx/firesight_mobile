@@ -13,14 +13,46 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   String _selectedActionFilter = 'All';
   late Future<List<Map<String, dynamic>>> _auditLogsFuture;
 
-  final List<String> _actionFilters = [
-    'All',
-    'USER_ROLE_UPDATED',
-    'USER_STATUS_TOGGLED',
-    'USER_PROVISIONED',
-    'INSPECTION_SUBMITTED',
-    'REPORT_GENERATED',
+  final List<Map<String, String>> _actionFilters = [
+    {'value': 'All', 'label': 'All System Events'},
+    {'value': 'USER_ROLE_UPDATED', 'label': 'Role Updated'},
+    {'value': 'USER_STATUS_TOGGLED', 'label': 'Status Changed'},
+    {'value': 'USER_PROVISIONED', 'label': 'User Provisioned'},
+    {'value': 'INSPECTION_SUBMITTED', 'label': 'Inspection Submitted'},
+    {'value': 'REPORT_GENERATED', 'label': 'Report Generated'},
+    {'value': 'OFFLINE_DATA_SYNCED', 'label': 'Offline Data Synced'},
   ];
+
+  static String formatActionType(String rawAction) {
+    if (rawAction.isEmpty) return 'System Event';
+    final upper = rawAction.toUpperCase().trim();
+
+    const Map<String, String> friendlyNames = {
+      'REPORT_GENERATED': 'Report Generated',
+      'OFFLINE_DATA_SYNCED': 'Offline Data Synced',
+      'USER_ROLE_UPDATED': 'User Role Updated',
+      'USER_STATUS_TOGGLED': 'User Status Changed',
+      'USER_PROVISIONED': 'User Provisioned',
+      'INSPECTION_SUBMITTED': 'Inspection Submitted',
+      'FIRE_RISK_SURVEY_SUBMITTED': 'Risk Survey Submitted',
+      'PASSWORD_RESET_REQUESTED': 'Password Reset',
+      'OFFLINE_INSPECTION_QUEUED': 'Offline Inspection Queued',
+      'OFFLINE_SURVEY_QUEUED': 'Offline Survey Queued',
+      'LOGIN_SUCCESS': 'User Login',
+      'LOGOUT': 'User Logout',
+    };
+
+    if (friendlyNames.containsKey(upper)) {
+      return friendlyNames[upper]!;
+    }
+
+    // Default beautifier: replace underscores and Title Case
+    return upper
+        .split(RegExp(r'[_\s]+'))
+        .where((w) => w.isNotEmpty)
+        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
+        .join(' ');
+  }
 
   @override
   void initState() {
@@ -47,27 +79,31 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshLogs(),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Search & Filter Header
-              _buildHeaderCard(),
-              const SizedBox(height: 16),
-
-              // Action Filter Chips
-              _buildFilterChips(),
-              const SizedBox(height: 16),
-
-              // Audit Logs Stream
-              _buildLogStream(),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Search Header & Filter Chips (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderCard(),
+                const SizedBox(height: 12),
+                _buildFilterChips(),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Audit Logs Stream
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => _refreshLogs(),
+              color: const Color(0xFFEA580C),
+              child: _buildLogStream(scrollable: true),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -101,22 +137,25 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                 child: const Icon(Icons.history_edu_outlined, color: Color(0xFFEA580C), size: 22),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Audit Trail & Activity Logs',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Audit Trail & Activity Logs',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
                     ),
-                  ),
-                  Text(
-                    'System-wide tracking of critical officer & profile actions',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
+                    SizedBox(height: 2),
+                    Text(
+                      'System-wide tracking of critical officer & profile actions',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -149,13 +188,14 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
       clipBehavior: Clip.none,
       child: Row(
         children: _actionFilters.map((filter) {
-          final isSelected = _selectedActionFilter == filter;
-          final displayLabel = filter == 'All' ? 'All System Events' : filter.replaceAll('_', ' ');
+          final filterVal = filter['value']!;
+          final filterLabel = filter['label']!;
+          final isSelected = _selectedActionFilter == filterVal;
 
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
-              label: Text(displayLabel),
+              label: Text(filterLabel),
               selected: isSelected,
               selectedColor: const Color(0xFFEA580C).withValues(alpha: 0.15),
               labelStyle: TextStyle(
@@ -169,7 +209,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               onSelected: (selected) {
                 if (selected) {
                   setState(() {
-                    _selectedActionFilter = filter;
+                    _selectedActionFilter = filterVal;
                     _refreshLogs();
                   });
                 }
@@ -181,7 +221,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     );
   }
 
-  Widget _buildLogStream() {
+  Widget _buildLogStream({bool scrollable = false}) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _auditLogsFuture,
       builder: (context, snapshot) {
@@ -196,7 +236,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
 
         final logs = snapshot.data ?? [];
         if (logs.isEmpty) {
-          return Container(
+          final emptyWidget = Container(
             width: double.infinity,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -205,6 +245,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.rule_folder_outlined, size: 48, color: Color(0xFF94A3B8)),
                 SizedBox(height: 12),
@@ -220,11 +261,21 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               ],
             ),
           );
+
+          if (scrollable) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: emptyWidget,
+            );
+          }
+          return emptyWidget;
         }
 
         return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: !scrollable,
+          physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+          padding: scrollable ? const EdgeInsets.fromLTRB(16, 0, 16, 24) : EdgeInsets.zero,
           itemCount: logs.length,
           separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
@@ -239,7 +290,9 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   Widget _buildAuditLogCard(Map<String, dynamic> item) {
     final String timestamp = item['created_at']?.toString() ?? '';
     final String performer = item['performer_name']?.toString() ?? 'System Officer';
-    final String actionType = (item['action_type'] ?? 'EVENT').toString().toUpperCase();
+    final String rawAction = (item['action_type'] ?? 'EVENT').toString();
+    final String formattedTitle = formatActionType(rawAction);
+    final String actionType = rawAction.toUpperCase();
     final String target = item['target_entity']?.toString() ?? 'General';
     final String details = item['details']?.toString() ?? '';
 
@@ -255,6 +308,12 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     } else if (actionType.contains('STATUS') || actionType.contains('TOGGLED')) {
       badgeColor = const Color(0xFFDC2626);
       actionIcon = Icons.shield_outlined;
+    } else if (actionType.contains('REPORT')) {
+      badgeColor = const Color(0xFF0284C7);
+      actionIcon = Icons.picture_as_pdf_outlined;
+    } else if (actionType.contains('SYNC') || actionType.contains('OFFLINE')) {
+      badgeColor = const Color(0xFF0D9488);
+      actionIcon = Icons.cloud_done_outlined;
     } else if (actionType.contains('INSPECTION')) {
       badgeColor = const Color(0xFFD84315);
       actionIcon = Icons.assignment_turned_in_outlined;
@@ -312,7 +371,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            actionType,
+                            formattedTitle,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -338,13 +397,17 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               children: [
                 const Icon(Icons.person_outline, size: 14, color: Color(0xFF64748B)),
                 const SizedBox(width: 4),
-                Text(
-                  performer,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                Flexible(
+                  child: Text(
+                    performer,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 const Icon(Icons.arrow_right_alt_rounded, size: 16, color: Color(0xFF94A3B8)),
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     target,

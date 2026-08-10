@@ -25,8 +25,13 @@ class OfflineSyncService {
   }
 
   Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = p.join(dbPath, 'firesight_offline.db');
+    final String path;
+    if (kIsWeb) {
+      path = 'firesight_offline.db';
+    } else {
+      final dbPath = await getDatabasesPath();
+      path = p.join(dbPath, 'firesight_offline.db');
+    }
 
     return await openDatabase(
       path,
@@ -428,6 +433,9 @@ class OfflineSyncService {
   }
 
   Future<String?> _uploadLocalFileToStorage(SupabaseClient client, String localPath) async {
+    if (kIsWeb) {
+      return null;
+    }
     try {
       final file = File(localPath);
       if (!await file.exists()) {

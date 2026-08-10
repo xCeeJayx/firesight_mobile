@@ -24,10 +24,10 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
   static const Color colorInfo = Color(0xFF0284C7);
 
   final TextEditingController _searchController = TextEditingController();
-  String _selectedFilter = 'All';
+  String _selectedFilter = 'Assigned';
   late Future<List<Map<String, dynamic>>> _inspectionsFuture;
 
-  final List<String> _filterOptions = ['All', 'Assigned', 'In Progress', 'Pending Sync', 'Completed'];
+  final List<String> _filterOptions = ['Assigned', 'In Progress', 'Pending Sync', 'Completed'];
 
   @override
   void initState() {
@@ -88,19 +88,17 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
     }
 
     // 3. Apply filters
-    if (_selectedFilter != 'All') {
-      items = items.where((item) {
-        final st = (item['overall_status'] ?? '').toString().toLowerCase();
-        final targetFilter = _selectedFilter.toLowerCase();
-        if (targetFilter == 'assigned') {
-          return st == 'assigned' || st == 'pending' || st == 'scheduled';
-        }
-        if (targetFilter == 'pending sync') {
-          return st == 'pending sync' || item['_is_offline_pending'] == true;
-        }
-        return st == targetFilter;
-      }).toList();
-    }
+    items = items.where((item) {
+      final st = (item['overall_status'] ?? '').toString().toLowerCase();
+      final targetFilter = _selectedFilter.toLowerCase();
+      if (targetFilter == 'assigned') {
+        return st == 'assigned' || st == 'pending' || st == 'scheduled';
+      }
+      if (targetFilter == 'pending sync') {
+        return st == 'pending sync' || item['_is_offline_pending'] == true;
+      }
+      return st == targetFilter;
+    }).toList();
 
     final queryText = _searchController.text.trim().toLowerCase();
     if (queryText.isNotEmpty) {
@@ -132,29 +130,31 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: colorCanvas,
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshInspections(),
-        color: colorAccent,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Card with Search
-              _buildHeaderAndSearch(),
-              const SizedBox(height: 16),
-
-              // Filter Chips
-              _buildFilterChips(),
-              const SizedBox(height: 16),
-
-              // Task List
-              _buildTaskList(),
-              const SizedBox(height: 80),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Header & Filter Chips (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderAndSearch(),
+                const SizedBox(height: 12),
+                _buildFilterChips(),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Task List
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => _refreshInspections(),
+              color: colorAccent,
+              child: _buildTaskList(scrollable: true),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(),
@@ -343,7 +343,7 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
     );
   }
 
-  Widget _buildTaskList() {
+  Widget _buildTaskList({bool scrollable = false}) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _inspectionsFuture,
       builder: (context, snapshot) {
@@ -358,7 +358,7 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
 
         final tasks = snapshot.data ?? [];
         if (tasks.isEmpty) {
-          return Container(
+          final emptyWidget = Container(
             width: double.infinity,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -367,6 +367,7 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
               border: Border.all(color: colorBorder),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.fact_check_outlined, size: 42, color: colorTextSecondary),
                 SizedBox(height: 12),
@@ -383,11 +384,21 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
               ],
             ),
           );
+
+          if (scrollable) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+              child: emptyWidget,
+            );
+          }
+          return emptyWidget;
         }
 
         return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: !scrollable,
+          physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+          padding: scrollable ? const EdgeInsets.fromLTRB(16, 0, 16, 90) : EdgeInsets.zero,
           itemCount: tasks.length,
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {

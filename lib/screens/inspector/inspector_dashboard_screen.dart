@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import '../../services/emergency_service.dart';
+import '../../widgets/emergency/emergency_reports_feed.dart';
 import '../../widgets/common/inspection_task_card.dart';
 import '../../active_inspection_screen.dart';
 import '../../new_inspection_screen.dart';
@@ -13,7 +15,6 @@ class FireInspectorDashboard extends StatefulWidget {
 }
 
 class _FireInspectorDashboardState extends State<FireInspectorDashboard> {
-  late Future<List<Map<String, dynamic>>> _assignedInspectionsFuture;
   late Future<Map<String, int>> _operationsCounterFuture;
 
   String _inspectorName = 'Fire Inspector';
@@ -38,9 +39,9 @@ class _FireInspectorDashboardState extends State<FireInspectorDashboard> {
 
   void _refreshData() {
     setState(() {
-      _assignedInspectionsFuture = _fetchAssignedInspections();
       _operationsCounterFuture = _fetchOperationsCounters();
     });
+    EmergencyService().fetchReports();
   }
 
   Future<Map<String, int>> _fetchOperationsCounters() async {
@@ -138,38 +139,8 @@ class _FireInspectorDashboardState extends State<FireInspectorDashboard> {
               ),
               const SizedBox(height: 10),
               _buildOperationsCounterChips(),
-              const SizedBox(height: 20),
-
-              // Assigned Inspection Schedule List
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Assigned Inspection Schedule',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const NewInspectionScreen(),
-                        ),
-                      ).then((_) => _refreshData());
-                    },
-                    icon: const Icon(Icons.add, size: 16, color: Color(0xFFEA580C)),
-                    label: const Text(
-                      'New Form 061',
-                      style: TextStyle(color: Color(0xFFEA580C), fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _buildInspectionScheduleList(),
+              // Live Emergency Reports Feed (Bottom Section)
+              const EmergencyReportsFeed(),
             ],
           ),
         ),

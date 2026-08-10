@@ -4,7 +4,8 @@ import '../../models/user_role.dart';
 import '../../services/auth_service.dart';
 import '../../services/offline_sync_service.dart';
 import '../../services/route_guard.dart';
-import '../../widgets/common/kpi_stat_card.dart';
+import '../../widgets/emergency/emergency_reports_feed.dart';
+import '../../services/emergency_service.dart';
 import 'user_management_screen.dart';
 import 'admin_reports_screen.dart';
 import 'audit_logs_screen.dart';
@@ -29,7 +30,6 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
   int _activeSubModuleIndex = 0; // 0: Overview Dashboard, 1: User Management, 2: Reports & Analytics, 3: Audit Logs
 
   late Future<Map<String, dynamic>> _dashboardMetricsFuture;
-  late Future<List<Map<String, dynamic>>> _inspectionsFeedFuture;
   late Future<List<Map<String, dynamic>>> _criticalAlertsFuture;
 
   @override
@@ -53,9 +53,9 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
     if (mounted) {
       setState(() {
         _dashboardMetricsFuture = _fetchMetrics();
-        _inspectionsFeedFuture = _fetchInspectionsFeed();
         _criticalAlertsFuture = _fetchCriticalAlerts();
       });
+      EmergencyService().fetchReports();
     }
   }
 
@@ -113,35 +113,6 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
       'riskOfficersCount': riskOfficersCount,
       'pendingAuditFlags': pendingAuditFlags,
     };
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchInspectionsFeed() async {
-    List<Map<String, dynamic>> items = [];
-
-    // Read offline pending items
-    try {
-      final offline = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
-      items.addAll(offline);
-    } catch (_) {}
-
-    try {
-      final response = await Supabase.instance.client
-          .from('inspections')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(10);
-      final remote = List<Map<String, dynamic>>.from(response);
-      final Set<String> existingIds = items.map((i) => (i['id'] ?? '').toString()).toSet();
-      for (var r in remote) {
-        final rId = (r['id'] ?? '').toString();
-        if (!existingIds.contains(rId)) {
-          items.add(r);
-        }
-      }
-      return items;
-    } catch (_) {
-      return items;
-    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchCriticalAlerts() async {
@@ -448,35 +419,42 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
   }
 
   Widget _buildStationCommandOverview() {
-    return RefreshIndicator(
-      onRefresh: () async => _refreshData(),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // High Priority Alert Banner
-            _buildAlertBanner(),
-
-            // KPI Grid
-            const Text(
-              'Station Command Analytics Overview',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Fixed Top Header & Overview Cards (Sticky / Non-scrolling)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAlertBanner(),
+              const Text(
+                'Station Command Analytics Overview',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            _buildKpiGrid(),
-            const SizedBox(height: 20),
-
-            // Recent Inspections Feed
-            _buildRecentActivitySection(),
-          ],
+              const SizedBox(height: 10),
+              _buildKpiGrid(),
+            ],
+          ),
         ),
-      ),
+
+        // Scrollable Live Emergency Reports Feed
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async => _refreshData(),
+            color: const Color(0xFFEA580C),
+            child: const EmergencyReportsFeed(
+              isExpanded: true,
+              padding: EdgeInsets.symmetric(horizontal: 16),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -516,15 +494,20 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'HIGH-PRIORITY COMMAND ALERT',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFFDC2626),
-                            letterSpacing: 0.5,
+                        const Expanded(
+                          child: Text(
+                            'HIGH-PRIORITY COMMAND ALERT',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFDC2626),
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           topAlert['time'] ?? 'Just now',
                           style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
@@ -560,60 +543,103 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _dashboardMetricsFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(30.0),
-              child: CircularProgressIndicator(color: Color(0xFFEA580C)),
-            ),
-          );
-        }
-
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
         final data = snapshot.data ?? {};
         final activePersonnel = data['activePersonnel']?.toString() ?? '12';
         final totalInspections = data['totalInspections']?.toString() ?? '48';
         final highRiskBarangays = data['highRiskBarangays']?.toString() ?? '14';
-        final pendingAuditFlags = data['pendingAuditFlags']?.toString() ?? '3';
 
-        return GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.35,
+        return Row(
           children: [
-            KpiStatCard(
+            _buildKpiCard(
               title: 'Active Personnel',
-              value: activePersonnel,
-              subtitle: 'Inspectors & CROs Active',
+              value: isLoading ? '...' : activePersonnel,
+              subtitle: 'Inspectors & CROs',
               icon: Icons.people_outline,
-              accentColor: const Color(0xFFEA580C),
+              color: const Color(0xFFEA580C),
             ),
-            KpiStatCard(
-              title: 'Total FSIC Inspections',
-              value: totalInspections,
-              subtitle: 'Conducted Station-wide',
+            const SizedBox(width: 10),
+            _buildKpiCard(
+              title: 'FSIC Inspections',
+              value: isLoading ? '...' : totalInspections,
+              subtitle: 'Station-wide',
               icon: Icons.assignment_turned_in_outlined,
-              accentColor: const Color(0xFF0F172A),
+              color: const Color(0xFF0F172A),
             ),
-            KpiStatCard(
-              title: 'High-Risk Barangays',
-              value: highRiskBarangays,
-              subtitle: 'OLP Assessed Zones',
+            const SizedBox(width: 10),
+            _buildKpiCard(
+              title: 'High-Risk Zones',
+              value: isLoading ? '...' : highRiskBarangays,
+              subtitle: 'OLP Assessed',
               icon: Icons.warning_amber_rounded,
-              accentColor: const Color(0xFFDC2626),
-            ),
-            KpiStatCard(
-              title: 'Pending Audit Flags',
-              value: pendingAuditFlags,
-              subtitle: 'Re-inspections Needed',
-              icon: Icons.shield_outlined,
-              accentColor: const Color(0xFF16A34A),
+              color: const Color(0xFFDC2626),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -680,272 +706,6 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildRecentActivitySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent Station Inspections',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                if (widget.onSelectTab != null) {
-                  widget.onSelectTab!(3);
-                }
-              },
-              child: const Text(
-                'View All Logs',
-                style: TextStyle(color: Color(0xFFEA580C), fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _inspectionsFeedFuture,
-          builder: (context, snapshot) {
-            final list = snapshot.data ?? [];
-            if (list.isEmpty) {
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: const Text(
-                  'No recent inspections recorded.',
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-              );
-            }
-
-            return Column(
-              children: list.take(5).map((item) {
-                final String bName = item['business_name']?.toString() ?? 'Establishment';
-                final String status = item['compliance_status']?.toString() ?? item['overall_status']?.toString() ?? 'Passed';
-                final isPass = status.toLowerCase().contains('compliant') || status.toLowerCase().contains('pass');
-                final bool isOfflinePending = status.toLowerCase() == 'pending sync' || item['_is_offline_pending'] == true;
-
-                return InkWell(
-                  onTap: () => _showInspectionDetailsModal(item),
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isPass ? Icons.check_circle_outline : Icons.warning_amber_rounded,
-                          color: isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                bName,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isOfflinePending ? 'Form 061 • PENDING SYNC (OFFLINE)' : 'Form 061 • Status: $status',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isOfflinePending ? const Color(0xFFB45309) : (isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  void _showInspectionDetailsModal(Map<String, dynamic> item) {
-    final String bName = item['business_name']?.toString() ?? 'Establishment Inspection';
-    final String status = item['compliance_status']?.toString() ?? item['overall_status']?.toString() ?? 'FSIC Issued';
-    final String recommendation = item['recommendation']?.toString() ?? 'No special recommendations recorded.';
-    final String dateInspected = item['date_inspected']?.toString() ?? item['created_at']?.toString().split('T')[0] ?? 'N/A';
-    final String inspectorId = item['inspector_id']?.toString() ?? 'Assigned BFP Inspector';
-    final isPass = status.toLowerCase().contains('compliant') || status.toLowerCase().contains('pass');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: (isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626)).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          isPass ? Icons.verified_outlined : Icons.warning_amber_rounded,
-                          color: isPass ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Inspection Record Details',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      bName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: isPass ? const Color(0xFFDCFCE7) : const Color(0xFFFEF2F2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            status,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: isPass ? const Color(0xFF15803D) : const Color(0xFFDC2626),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Date: $dateInspected',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Inspector Recommendation & Findings',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                recommendation,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Inspector Ref: $inspectorId',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

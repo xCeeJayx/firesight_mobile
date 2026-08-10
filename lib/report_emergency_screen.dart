@@ -23,9 +23,9 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
   final TextEditingController _reporterNameController = TextEditingController();
   final TextEditingController _reporterContactController = TextEditingController();
 
-  bool _isAnonymous = false;
   bool _isDetectingLocation = false;
   bool _isSubmitting = false;
+  bool _attemptedSubmit = false;
 
   double? _latitude;
   double? _longitude;
@@ -193,21 +193,28 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
   }
 
   Future<void> _submitReport() async {
+    setState(() => _attemptedSubmit = true);
+
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_pickedImageFile == null && _pickedImageBytes == null) {
+      _showSnackBar('Photo evidence is required. Please capture or attach a photo of the incident.');
       return;
     }
 
     setState(() => _isSubmitting = true);
 
     final result = await SupabaseService.submitEmergencyReport(
-      reporterName: _isAnonymous ? 'Anonymous Citizen' : _reporterNameController.text,
-      reporterContact: _isAnonymous ? 'Anonymous' : _reporterContactController.text,
+      reporterName: _reporterNameController.text.trim(),
+      reporterContact: _reporterContactController.text.trim(),
       incidentType: _selectedIncidentType,
       barangay: _selectedBarangay,
-      address: _addressController.text,
+      address: _addressController.text.trim(),
       latitude: _latitude,
       longitude: _longitude,
-      description: _descriptionController.text,
+      description: _descriptionController.text.trim(),
       photoFile: _pickedImageFile,
       photoBytes: _pickedImageBytes,
       photoName: _pickedImageName,
@@ -302,7 +309,7 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
     setState(() {
       _selectedIncidentType = 'Structural Fire';
       _selectedBarangay = 'Poblacion';
-      _isAnonymous = false;
+      _attemptedSubmit = false;
       _pickedImageFile = null;
       _pickedImageBytes = null;
       _pickedImageName = null;
@@ -321,6 +328,8 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isPhotoMissing = _attemptedSubmit && _pickedImageFile == null && _pickedImageBytes == null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: CustomScrollView(
@@ -369,7 +378,7 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
                   ElevatedButton.icon(
                     onPressed: () => SupabaseService.callBfpHotline(),
                     icon: const Icon(Icons.phone_forwarded_rounded, size: 18),
-                    label: const Text('CALL HOTLINE: (075) 632-3023', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Text('CALL HOTLINE: 0917-186-1611', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFFDC2626),
@@ -407,7 +416,7 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Provide incident details to help BFP officers respond effectively.',
+                        'Provide incident details to help BFP officers respond effectively. All fields marked (*) are required.',
                         style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                       const SizedBox(height: 20),
@@ -457,6 +466,41 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
                         validator: (val) {
                           if (val == null || val.trim().isEmpty) {
                             return 'Please enter exact landmark or address.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Reporter Full Name (Required)
+                      const Text('Reporter Full Name *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _reporterNameController,
+                        decoration: _inputDecoration(Icons.person_outline_rounded, hintText: 'e.g., Juan Dela Cruz'),
+                        textCapitalization: TextCapitalization.words,
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter your full name.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Contact Phone Number (Required)
+                      const Text('Contact Phone Number *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _reporterContactController,
+                        keyboardType: TextInputType.phone,
+                        decoration: _inputDecoration(Icons.phone_outlined, hintText: 'e.g., 0917-123-4567'),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter your contact phone number.';
+                          }
+                          if (val.trim().length < 7) {
+                            return 'Please enter a valid contact phone number.';
                           }
                           return null;
                         },
@@ -515,61 +559,36 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Anonymous Toggle
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: SwitchListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Report Anonymously', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          subtitle: const Text('Hide your name and phone number from the report', style: TextStyle(fontSize: 11)),
-                          value: _isAnonymous,
-                          activeColor: const Color(0xFFDC2626),
-                          onChanged: (val) => setState(() => _isAnonymous = val),
-                        ),
+                      // Photo Evidence (Required)
+                      Row(
+                        children: const [
+                          Text(
+                            'Photo Evidence *',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155)),
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            '(Required for verification)',
+                            style: TextStyle(fontSize: 11, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-
-                      if (!_isAnonymous) ...[
-                        const Text('Reporter Name (Optional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155))),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _reporterNameController,
-                          decoration: _inputDecoration(Icons.person_outline_rounded, hintText: 'Juan Dela Cruz'),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text('Contact Phone Number (Optional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155))),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _reporterContactController,
-                          keyboardType: TextInputType.phone,
-                          decoration: _inputDecoration(Icons.phone_outlined, hintText: '0917-XXX-XXXX'),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Photo Proof Selector
-                      const Text('Photo Evidence (Optional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF334155))),
                       const SizedBox(height: 6),
                       if (_pickedImageFile != null || _pickedImageBytes != null)
                         Container(
-                          height: 120,
+                          height: 130,
                           width: double.infinity,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                            border: Border.all(color: const Color(0xFF16A34A), width: 1.5),
                           ),
                           child: Stack(
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
                                 child: _pickedImageBytes != null
-                                    ? Image.memory(_pickedImageBytes!, width: double.infinity, height: 120, fit: BoxFit.cover)
-                                    : Image.file(_pickedImageFile!, width: double.infinity, height: 120, fit: BoxFit.cover),
+                                    ? Image.memory(_pickedImageBytes!, width: double.infinity, height: 130, fit: BoxFit.cover)
+                                    : Image.file(_pickedImageFile!, width: double.infinity, height: 130, fit: BoxFit.cover),
                               ),
                               Positioned(
                                 top: 8,
@@ -589,19 +608,70 @@ class _ReportEmergencyScreenState extends State<ReportEmergencyScreen> {
                                   ),
                                 ),
                               ),
+                              Positioned(
+                                bottom: 8,
+                                left: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black87,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.check_circle_rounded, color: Color(0xFF22C55E), size: 14),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Photo Attached',
+                                        style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         )
                       else
-                        OutlinedButton.icon(
-                          onPressed: _showImageSourceOptions,
-                          icon: const Icon(Icons.add_a_photo_rounded, size: 20),
-                          label: const Text('Attach Photo Proof', style: TextStyle(fontWeight: FontWeight.w600)),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48),
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _showImageSourceOptions,
+                              icon: Icon(
+                                Icons.add_a_photo_rounded,
+                                size: 20,
+                                color: isPhotoMissing ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                              ),
+                              label: Text(
+                                'Capture / Attach Photo Evidence *',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: isPhotoMissing ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 48),
+                                side: BorderSide(
+                                  color: isPhotoMissing ? const Color(0xFFDC2626) : const Color(0xFFCBD5E1),
+                                  width: isPhotoMissing ? 1.5 : 1.0,
+                                ),
+                                backgroundColor: isPhotoMissing ? const Color(0xFFFEF2F2) : Colors.transparent,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                            if (isPhotoMissing) ...[
+                              const SizedBox(height: 6),
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Text(
+                                  'Photo evidence is required to submit an emergency incident.',
+                                  style: TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       const SizedBox(height: 24),
 

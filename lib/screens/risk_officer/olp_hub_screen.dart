@@ -123,85 +123,48 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchRecentOlps,
-        color: const Color(0xFFEA580C),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-
-              // Actionable Cards Section Title
-              const Text(
-                'Launch OLP Risk Survey',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Launch Cards (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildActionCard(
+                    title: 'Barangay CFPP Assessment',
+                    subtitle: 'Community Fire Protection Plan & Vulnerability Matrix',
+                    badge: 'BARANGAY PROFILE',
+                    icon: Icons.location_city_outlined,
+                    color: const Color(0xFF0F172A),
+                    onTap: _launchBarangaySurvey,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-
-              // 2 Prominent Action Cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionCard(
-                      title: 'Barangay CFPP Assessment',
-                      subtitle: 'Community Fire Protection Plan & Vulnerability Matrix',
-                      badge: 'BARANGAY PROFILE',
-                      icon: Icons.location_city_outlined,
-                      color: const Color(0xFF0F172A),
-                      onTap: _launchBarangaySurvey,
-                    ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionCard(
+                    title: 'House-to-House Safety Check',
+                    subtitle: 'Official 35-Item Household Fire Safety Checklist',
+                    badge: 'H2H HOUSEHOLD',
+                    icon: Icons.home_work_outlined,
+                    color: const Color(0xFFEA580C),
+                    onTap: _launchH2HSurvey,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildActionCard(
-                      title: 'House-to-House Safety Check',
-                      subtitle: 'Official 35-Item Household Fire Safety Checklist',
-                      badge: 'H2H HOUSEHOLD',
-                      icon: Icons.home_work_outlined,
-                      color: const Color(0xFFEA580C),
-                      onTap: _launchH2HSurvey,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Recent Submissions Feed Title
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Recent OLP Submissions',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: _fetchRecentOlps,
-                    icon: const Icon(Icons.refresh_outlined, size: 16, color: Color(0xFFEA580C)),
-                    label: const Text(
-                      'Refresh',
-                      style: TextStyle(color: Color(0xFFEA580C), fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Recent Submissions Feed List
-              _buildRecentFeedList(),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
+
+          // Scrollable Recent Submissions Feed
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _fetchRecentOlps,
+              color: const Color(0xFFEA580C),
+              child: _buildRecentFeedList(scrollable: true),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -414,7 +377,7 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
     );
   }
 
-  Widget _buildRecentFeedList() {
+  Widget _buildRecentFeedList({bool scrollable = false}) {
     if (_isLoading) {
       return const Center(
         child: Padding(
@@ -425,7 +388,7 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
     }
 
     if (_recentOlps.isEmpty) {
-      return Container(
+      final emptyWidget = Container(
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -434,6 +397,7 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: const [
             Icon(Icons.inbox_outlined, size: 36, color: Color(0xFF94A3B8)),
             SizedBox(height: 8),
@@ -444,15 +408,51 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           ],
         ),
       );
+
+      if (scrollable) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: emptyWidget,
+        );
+      }
+      return emptyWidget;
     }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _recentOlps.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
+    return ListView.builder(
+      shrinkWrap: !scrollable,
+      physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+      padding: scrollable ? const EdgeInsets.fromLTRB(16, 8, 16, 24) : EdgeInsets.zero,
+      itemCount: _recentOlps.length + 1,
       itemBuilder: (context, index) {
-        final survey = _recentOlps[index];
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent OLP Submissions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _fetchRecentOlps,
+                  icon: const Icon(Icons.refresh_outlined, size: 16, color: Color(0xFFEA580C)),
+                  label: const Text(
+                    'Refresh',
+                    style: TextStyle(color: Color(0xFFEA580C), fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final survey = _recentOlps[index - 1];
         final surveyType = survey['survey_type']?.toString() ?? survey['checklist_type']?.toString() ?? 'barangay';
         final isH2H = surveyType == 'house_to_house';
 

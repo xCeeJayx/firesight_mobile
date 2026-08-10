@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/fsic_certificate_preview_modal.dart';
-import 'commercial_inspection_form_screen.dart';
 import 'view_inspection_form_dialog.dart';
 
 class EstablishmentDirectoryScreen extends StatefulWidget {
@@ -162,24 +161,24 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
 
     return Scaffold(
       backgroundColor: colorCanvas,
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshDirectory(),
-        color: colorAccent,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header & Search
-              _buildHeaderAndSearchCard(barangayOptions),
-              const SizedBox(height: 16),
-
-              // Directory List
-              _buildEstablishmentList(),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Header & Search Filters (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: _buildHeaderAndSearchCard(barangayOptions),
           ),
-        ),
+
+          // Scrollable Establishment Directory List
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => _refreshDirectory(),
+              color: colorAccent,
+              child: _buildEstablishmentList(scrollable: true),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -283,7 +282,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
     );
   }
 
-  Widget _buildEstablishmentList() {
+  Widget _buildEstablishmentList({bool scrollable = false}) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _establishmentsFuture,
       builder: (context, snapshot) {
@@ -298,7 +297,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
 
         final list = snapshot.data ?? [];
         if (list.isEmpty) {
-          return Container(
+          final emptyWidget = Container(
             width: double.infinity,
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
@@ -307,6 +306,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
               border: Border.all(color: colorBorder),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: const [
                 Icon(Icons.storefront_outlined, size: 40, color: colorTextSecondary),
                 SizedBox(height: 10),
@@ -322,11 +322,21 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
               ],
             ),
           );
+
+          if (scrollable) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: emptyWidget,
+            );
+          }
+          return emptyWidget;
         }
 
         return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: !scrollable,
+          physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+          padding: scrollable ? const EdgeInsets.fromLTRB(16, 0, 16, 24) : EdgeInsets.zero,
           itemCount: list.length,
           separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
@@ -410,48 +420,36 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    const Divider(height: 1, color: colorBorder),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            if (isDone) {
-                              _showInspectionForm(est);
-                            } else {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => CommercialInspectionFormScreen(
-                                    initialBusinessName: bName,
-                                    initialAddress: addr,
-                                    initialIoNumber: est['inspection_order_no']?.toString(),
-                                  ),
-                                ),
-                              ).then((_) => _refreshDirectory());
-                            }
-                          },
-                          icon: Icon(
-                            isDone ? Icons.description_outlined : Icons.play_arrow_outlined,
-                            size: 16,
-                            color: Colors.white,
+                    if (isDone) ...[
+                      const SizedBox(height: 10),
+                      const Divider(height: 1, color: colorBorder),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _showInspectionForm(est),
+                            icon: const Icon(
+                              Icons.description_outlined,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'View Form',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorSuccess,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
                           ),
-                          label: Text(
-                            isDone ? 'View Form' : 'Start Inspection Order',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isDone ? colorSuccess : colorAccent,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -520,43 +518,33 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
           _buildDetailRow(Icons.location_on_outlined, 'Address / Barangay', addr),
           _buildDetailRow(Icons.confirmation_number_outlined, 'Latest IO #', ioNo),
           _buildDetailRow(Icons.event_outlined, 'Last Inspected', lastDate.toString().split('T').first),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                if (isDone) {
+          if (isDone) ...[
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
                   _showInspectionForm(est);
-                } else {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => CommercialInspectionFormScreen(
-                        initialBusinessName: bName,
-                        initialAddress: addr,
-                        initialIoNumber: ioNo,
-                      ),
-                    ),
-                  ).then((_) => _refreshDirectory());
-                }
-              },
-              icon: Icon(
-                isDone ? Icons.description_outlined : Icons.play_arrow_outlined,
-                size: 20,
-                color: Colors.white,
-              ),
-              label: Text(
-                isDone ? 'View Form' : 'Start Inspection Order',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDone ? colorSuccess : colorAccent,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                },
+                icon: const Icon(
+                  Icons.description_outlined,
+                  size: 20,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  'View Inspection Form',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorSuccess,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
         ],
       ),

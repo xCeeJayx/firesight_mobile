@@ -3,11 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/offline_sync_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/olp_risk_report_pdf_service.dart';
 import '../../models/user_role.dart';
 import '../../models/house_to_house_checklist_model.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 class RiskReportsScreen extends StatefulWidget {
   const RiskReportsScreen({super.key});
@@ -207,15 +205,38 @@ class _RiskReportsScreenState extends State<RiskReportsScreen> {
               child: const Text('Close'),
             ),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('OLP Risk Report exported for station archives.'),
-                    backgroundColor: Color(0xFF16A34A),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                try {
+                  final user = Supabase.instance.client.auth.currentUser;
+                  final officerName = user?.userMetadata?['name'] ?? user?.userMetadata?['full_name'] ?? user?.email?.split('@').first ?? 'Community Risk Officer';
+                  await OlpRiskReportPdfService.generateAndPrintOlpPdf(
+                    surveys: filtered,
+                    highRiskCount: _highRiskCount,
+                    mediumRiskCount: _mediumRiskCount,
+                    lowRiskCount: _lowRiskCount,
+                    officerName: officerName,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('OLP Risk Report exported for station archives!'),
+                        backgroundColor: Color(0xFF16A34A),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to generate PDF: $e'),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEA580C),
@@ -270,171 +291,193 @@ class _RiskReportsScreenState extends State<RiskReportsScreen> {
           child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchRiskSurveys,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fixed Top Analytics & Filter Controls (Sticky / Non-scrolling)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAnalyticsCard(),
+                const SizedBox(height: 12),
+                _buildFilterControlsCard(),
+              ],
+            ),
+          ),
+
+          // Scrollable Historical Survey Records
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _fetchRiskSurveys,
+              color: const Color(0xFFEA580C),
+              child: _buildHistoricalRecordsList(filteredLogs),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoricalRecordsList(List<Map<String, dynamic>> filteredLogs) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFEA580C)));
+    }
+
+    if (filteredLogs.isEmpty) {
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: Container(
+          padding: const EdgeInsets.all(30),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Aggregated Distribution Breakdown Card
-              _buildAnalyticsCard(),
-              const SizedBox(height: 20),
-
-              // Filter Controls Card
-              _buildFilterControlsCard(),
-              const SizedBox(height: 20),
-
-              // Historical Survey Log Table Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Historical Survey Records',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  Text(
-                    '${filteredLogs.length} Records',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.assignment_late_outlined, size: 40, color: Color(0xFF94A3B8)),
+              SizedBox(height: 10),
+              Text(
+                'No survey records found matching filters',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF64748B),
+                ),
               ),
-              const SizedBox(height: 12),
-
-              // Historical Survey List
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFEA580C)))
-                  : filteredLogs.isEmpty
-                      ? Container(
-                          padding: const EdgeInsets.all(30),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Column(
-                            children: const [
-                              Icon(Icons.assignment_late_outlined, size: 40, color: Color(0xFF94A3B8)),
-                              SizedBox(height: 10),
-                              Text(
-                                'No survey records found matching filters',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: filteredLogs.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final survey = filteredLogs[index];
-                            final bgy = (survey['barangay'] ?? survey['barangay_name'] ?? 'Poblacion').toString();
-                            final risk = (survey['risk_level'] ?? survey['vulnerability_rating'] ?? 'Medium').toString();
-                            final riskColor = _getRiskColor(risk);
-
-                            final dateStr = survey['created_at']?.toString() ?? survey['date_inspected']?.toString();
-                            final date = dateStr != null
-                                ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? ''
-                                : '';
-                            final surveyor = survey['surveyor_name']?.toString() ?? 'Officer';
-                            final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
-
-                            return Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: riskColor.withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.shield_outlined,
-                                      color: riskColor,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Brgy. $bgy',
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0F172A),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Assessed by $surveyor • $date',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (isOfflinePending) ...[
-                                          const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
-                                          const SizedBox(width: 4),
-                                        ],
-                                        Text(
-                                          isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
-                                          style: TextStyle(
-                                            color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
             ],
           ),
         ),
-      ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: filteredLogs.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Historical Survey Records',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                Text(
+                  '${filteredLogs.length} Records',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final survey = filteredLogs[index - 1];
+        final bgy = (survey['barangay'] ?? survey['barangay_name'] ?? 'Poblacion').toString();
+        final risk = (survey['risk_level'] ?? survey['vulnerability_rating'] ?? 'Medium').toString();
+        final riskColor = _getRiskColor(risk);
+
+        final dateStr = survey['created_at']?.toString() ?? survey['date_inspected']?.toString();
+        final date = dateStr != null
+            ? DateTime.tryParse(dateStr)?.toLocal().toString().split(' ')[0] ?? ''
+            : '';
+        final surveyor = survey['surveyor_name']?.toString() ?? 'Officer';
+        final bool isOfflinePending = (survey['status'] ?? '').toString().toLowerCase() == 'pending sync' || survey['_is_offline_pending'] == true;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: riskColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.shield_outlined,
+                    color: riskColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Brgy. $bgy',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Assessed by $surveyor • $date',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isOfflinePending ? const Color(0xFFFEF3C7) : riskColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isOfflinePending ? const Color(0xFFF59E0B).withOpacity(0.5) : riskColor.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isOfflinePending) ...[
+                        const Icon(Icons.sync_problem_rounded, size: 12, color: Color(0xFFB45309)),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        isOfflinePending ? 'PENDING SYNC (OFFLINE)' : risk.toUpperCase(),
+                        style: TextStyle(
+                          color: isOfflinePending ? const Color(0xFFB45309) : riskColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
