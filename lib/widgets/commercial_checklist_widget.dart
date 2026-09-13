@@ -89,6 +89,34 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   final _teamLeaderNameCtrl = TextEditingController();
   final _fireMarshalNameCtrl = TextEditingController();
 
+  // Section VII Hazards
+  final _hazardContentsCtrl = TextEditingController();
+  final _hazardQuantityCtrl = TextEditingController();
+  final _hazardPlacardCtrl = TextEditingController();
+  String? _withinMaq;
+  final _hazardIdentificationNoCtrl = TextEditingController();
+  String? _hazardClassification;
+  final _hazardClassCtrl = TextEditingController();
+  final _flashPointCtrl = TextEditingController();
+
+  // Section VIII.J Building Service Equipment
+  String? _bseUtilities;
+  String? _bseHvac;
+  String? _bseSmokeControl;
+  String? _bseRubbishChutes;
+
+  // Section VIII.K Fire Wall
+  String? _fireWallProvided;
+  String? _fireWallExtension;
+  String? _fireWallType;
+
+  // Itemized Defects (Items IV to VIII)
+  final _defectsItemIVCtrl = TextEditingController();
+  final _defectsItemVCtrl = TextEditingController();
+  final _defectsItemVICtrl = TextEditingController();
+  final _defectsItemVIICtrl = TextEditingController();
+  final _defectsItemVIIICtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +130,14 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       _addressCtrl.text = widget.initialAddress!;
     }
     _dateInspectedCtrl.text = DateTime.now().toString().split(' ')[0];
+
+    // Auto-populate inspector name from current user profile
+    final profile = AuthService().userProfile;
+    if (profile != null && profile['full_name'] != null && profile['full_name'].toString().isNotEmpty) {
+      if (_inspectorNameCtrl.text.isEmpty) {
+        _inspectorNameCtrl.text = profile['full_name'].toString();
+      }
+    }
 
     if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
       _fetchExistingInspection();
@@ -244,6 +280,33 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
             if (_model.inspectorName.isNotEmpty) _inspectorNameCtrl.text = _model.inspectorName;
             if (_model.teamLeaderName.isNotEmpty) _teamLeaderNameCtrl.text = _model.teamLeaderName;
             if (_model.fireMarshalName.isNotEmpty) _fireMarshalNameCtrl.text = _model.fireMarshalName;
+
+            // Hazard details
+            _hazardContentsCtrl.text = _model.hazardContents;
+            _hazardQuantityCtrl.text = _model.hazardQuantity;
+            _hazardPlacardCtrl.text = _model.hazardPlacard;
+            _withinMaq = _model.withinMaq;
+            _hazardIdentificationNoCtrl.text = _model.hazardIdentificationNo;
+            _hazardClassification = _model.hazardClassification;
+            _hazardClassCtrl.text = _model.hazardClass;
+            _flashPointCtrl.text = _model.flashPoint;
+
+            // BSE & FW
+            _bseUtilities = _model.bseUtilities;
+            _bseHvac = _model.bseHvac;
+            _bseSmokeControl = _model.bseSmokeControl;
+            _bseRubbishChutes = _model.bseRubbishChutes;
+
+            _fireWallProvided = _model.fireWallProvided;
+            _fireWallExtension = _model.fireWallExtension;
+            _fireWallType = _model.fireWallType;
+
+            // Itemized defects
+            _defectsItemIVCtrl.text = _model.defectsItemIV;
+            _defectsItemVCtrl.text = _model.defectsItemV;
+            _defectsItemVICtrl.text = _model.defectsItemVI;
+            _defectsItemVIICtrl.text = _model.defectsItemVII;
+            _defectsItemVIIICtrl.text = _model.defectsItemVIII;
           }
         });
       }
@@ -289,6 +352,19 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     _inspectorNameCtrl.dispose();
     _teamLeaderNameCtrl.dispose();
     _fireMarshalNameCtrl.dispose();
+
+    _hazardContentsCtrl.dispose();
+    _hazardQuantityCtrl.dispose();
+    _hazardPlacardCtrl.dispose();
+    _hazardIdentificationNoCtrl.dispose();
+    _hazardClassCtrl.dispose();
+    _flashPointCtrl.dispose();
+
+    _defectsItemIVCtrl.dispose();
+    _defectsItemVCtrl.dispose();
+    _defectsItemVICtrl.dispose();
+    _defectsItemVIICtrl.dispose();
+    _defectsItemVIIICtrl.dispose();
     super.dispose();
   }
 
@@ -389,6 +465,34 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     _model.inspectorName = _inspectorNameCtrl.text;
     _model.teamLeaderName = _teamLeaderNameCtrl.text;
     _model.fireMarshalName = _fireMarshalNameCtrl.text;
+
+    // Hazards
+    _model.hazardContents = _hazardContentsCtrl.text;
+    _model.hazardQuantity = _hazardQuantityCtrl.text;
+    _model.hazardPlacard = _hazardPlacardCtrl.text;
+    _model.withinMaq = _withinMaq;
+    _model.hazardIdentificationNo = _hazardIdentificationNoCtrl.text;
+    _model.hazardClassification = _hazardClassification;
+    _model.hazardClass = _hazardClassCtrl.text;
+    _model.flashPoint = _flashPointCtrl.text;
+
+    // Building Service Equipment
+    _model.bseUtilities = _bseUtilities;
+    _model.bseHvac = _bseHvac;
+    _model.bseSmokeControl = _bseSmokeControl;
+    _model.bseRubbishChutes = _bseRubbishChutes;
+
+    // Fire Wall
+    _model.fireWallProvided = _fireWallProvided;
+    _model.fireWallExtension = _fireWallExtension;
+    _model.fireWallType = _fireWallType;
+
+    // Itemized Defects
+    _model.defectsItemIV = _defectsItemIVCtrl.text;
+    _model.defectsItemV = _defectsItemVCtrl.text;
+    _model.defectsItemVI = _defectsItemVICtrl.text;
+    _model.defectsItemVII = _defectsItemVIICtrl.text;
+    _model.defectsItemVIII = _defectsItemVIIICtrl.text;
 
     final payloadData = _model.toJson();
     payloadData['checklist_type'] = 'commercial';
@@ -1065,6 +1169,90 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       child: Column(
         children: [
           _buildAccordion(
+            title: 'Hazard Details & Classification (Section VII)',
+            icon: Icons.warning_amber_rounded,
+            children: [
+              _buildTextField('Hazard Contents', controller: _hazardContentsCtrl, hint: 'e.g. Paints, Solvents, LPG, Alcohol'),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _buildTextField('Quantity (Vol. / Weight)', controller: _hazardQuantityCtrl, hint: 'e.g. 50 Liters / 100 kg')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTextField('Hazard Placard', controller: _hazardPlacardCtrl, hint: 'NFPA 704 / Placard info')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Within MAQ (Max Allowable Qty):', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: ['Yes', 'No'].map((opt) {
+                            final isSel = _withinMaq == opt;
+                            return Expanded(
+                              child: InkWell(
+                                onTap: () => setState(() => _withinMaq = opt),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSel ? primaryColor.withValues(alpha: 0.1) : inputBgColor,
+                                    border: Border.all(color: isSel ? primaryColor : borderColor),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(opt, style: TextStyle(color: isSel ? primaryColor : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTextField('Hazard ID #', controller: _hazardIdentificationNoCtrl, hint: 'e.g. UN 1203')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('Hazard Classification:', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Row(
+                children: ['Low', 'Ordinary', 'High'].map((cls) {
+                  final isSel = _hazardClassification == cls;
+                  return Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _hazardClassification = cls),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSel ? primaryColor.withValues(alpha: 0.1) : inputBgColor,
+                          border: Border.all(color: isSel ? primaryColor : borderColor),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(cls, style: TextStyle(color: isSel ? primaryColor : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _buildTextField('Class', controller: _hazardClassCtrl, hint: 'e.g. Class I-A / II / III')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildTextField('Flash Point', controller: _flashPointCtrl, hint: 'e.g. < 23°C / 37.8°C')),
+                ],
+              ),
+            ],
+          ),
+          _buildAccordion(
             title: 'A. Other Flammable Liquids (Alcohol, Ether, etc.)',
             icon: Icons.science_outlined,
             children: flammableLiquids.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
@@ -1116,7 +1304,6 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       'Extinguishers Pressure - Gauge reads in the "green" area',
       'Emergency Lighting Battery - Battery lights turn on on power failure',
       'Kitchen Hoods & Vents - Hoods, vents, fans & ducts free from grease',
-      'Fire Wall (FW) - Provided min 2 hrs fire resistance (>=760mm extension)',
     ];
 
     return Container(
@@ -1139,9 +1326,53 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
             children: firePumpItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
           ),
           _buildAccordion(
-            title: 'D-K. Fire Alarms, Extinguishers, Kitchen & Fire Wall',
+            title: 'D-I. Fire Alarms, Extinguishers & Kitchen',
             icon: Icons.shield_outlined,
             children: alarmAndExtinguishers.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
+          ),
+          _buildAccordion(
+            title: 'J. Building Service Equipment (AKHFSS, HVAC, Smoke, Chutes)',
+            icon: Icons.construction_outlined,
+            children: [
+              _buildChoiceToggleRow('1. Utilities (Cooking equipment protected by AKHFSS)', _bseUtilities, (val) => setState(() => _bseUtilities = val)),
+              _buildChoiceToggleRow('2. Heating, Ventilating and Air-conditioning (PMEC)', _bseHvac, (val) => setState(() => _bseHvac = val)),
+              _buildChoiceToggleRow('3. Smoke Control Systems / Smoke Management', _bseSmokeControl, (val) => setState(() => _bseSmokeControl = val)),
+              _buildChoiceToggleRow('4. Rubbish / Laundry Chutes & Incinerators', _bseRubbishChutes, (val) => setState(() => _bseRubbishChutes = val)),
+            ],
+          ),
+          _buildAccordion(
+            title: 'K. Fire Wall (FW) Specifications',
+            icon: Icons.fence_outlined,
+            children: [
+              _buildYesNoToggleRow('Provided with Fire Wall (minimum 2 hours fire resistance)', _fireWallProvided, (val) => setState(() => _fireWallProvided = val)),
+              const SizedBox(height: 10),
+              _buildYesNoToggleRow('FW extension above roof surface shall not be less than 760mm', _fireWallExtension, (val) => setState(() => _fireWallExtension = val)),
+              const SizedBox(height: 12),
+              Text('Wall Type:', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Column(
+                children: [
+                  '125mm Solid Concrete',
+                  '150mm Solid Masonry',
+                  '200mm Hallow Unit Masonry',
+                ].map((wt) {
+                  final isSel = _fireWallType == wt;
+                  return InkWell(
+                    onTap: () => setState(() => _fireWallType = wt),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 16, color: isSel ? primaryColor : subtitleColor),
+                          const SizedBox(width: 8),
+                          Text(wt, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
         ],
       ),
@@ -1165,7 +1396,23 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTextField('DEFECTS / DEFICIENCIES SUMMARY', controller: _defectsSummaryCtrl, maxLines: 3, hint: 'State defects found in Items IV to VIII'),
+          _buildAccordion(
+            title: 'Itemized Defects & Deficiencies (Items IV to VIII)',
+            icon: Icons.list_alt_outlined,
+            children: [
+              _buildTextField('ITEM IV: General Information Defects', controller: _defectsItemIVCtrl, maxLines: 2, hint: 'Deficiencies in general info or permits'),
+              const SizedBox(height: 10),
+              _buildTextField('ITEM V: Means of Egress Defects', controller: _defectsItemVCtrl, maxLines: 2, hint: 'Deficiencies in doors, corridors, stairs, or ramps'),
+              const SizedBox(height: 10),
+              _buildTextField('ITEM VI: Signs & Illumination Defects', controller: _defectsItemVICtrl, maxLines: 2, hint: 'Deficiencies in exit signs, lighting, or evacuation plan'),
+              const SizedBox(height: 10),
+              _buildTextField('ITEM VII: Hazards & Flammable Materials Defects', controller: _defectsItemVIICtrl, maxLines: 2, hint: 'Deficiencies in hazardous materials, storage, or housekeeping'),
+              const SizedBox(height: 10),
+              _buildTextField('ITEM VIII: Fire Protection Systems Defects', controller: _defectsItemVIIICtrl, maxLines: 2, hint: 'Deficiencies in sprinklers, standpipes, alarms, extinguishers, or BSE'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildTextField('OVERALL DEFECTS SUMMARY', controller: _defectsSummaryCtrl, maxLines: 3, hint: 'Summary of critical defects found'),
           const SizedBox(height: 18),
           Text('RECOMMENDATIONS:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
           const SizedBox(height: 10),
@@ -1206,7 +1453,9 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
           const SizedBox(height: 12),
           _buildTextField('Team Leader', controller: _teamLeaderNameCtrl),
           const SizedBox(height: 12),
-          _buildTextField('City / Municipal Fire Marshal', controller: _fireMarshalNameCtrl),
+          _buildTextField('City / Municipal Fire Marshal', controller: _fireMarshalNameCtrl, hint: 'Leave blank if pending Web Admin approval'),
+          const SizedBox(height: 4),
+          Text('(Note: The Fire Marshal name will be approved and input on FireSight Web Admin)', style: TextStyle(color: subtitleColor, fontSize: 11, fontStyle: FontStyle.italic)),
         ],
       ),
     );
@@ -1345,7 +1594,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
                   style: TextStyle(fontSize: 12, color: titleColor, fontWeight: FontWeight.bold),
                   decoration: InputDecoration(
                     hintText: 'Dim (m)',
-                    hintStyle: TextStyle(color: subtitleColor.withOpacity(0.5), fontSize: 11),
+                    hintStyle: TextStyle(color: subtitleColor.withValues(alpha: 0.5), fontSize: 11),
                     filled: true,
                     fillColor: inputBgColor,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -1476,6 +1725,67 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     );
   }
 
+  Widget _buildChoiceToggleRow(String label, String? currentVal, Function(String) onChanged) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Row(
+            children: ['Passed', 'Failed', 'N/A'].map((opt) {
+              final isSel = currentVal == opt;
+              Color bg = const Color(0xFFF1F5F9);
+              Color borderC = borderColor;
+              Color textC = subtitleColor;
+              IconData iconData = Icons.do_not_disturb_on_outlined;
+
+              if (opt == 'Passed') {
+                bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
+                borderC = isSel ? successColor : borderColor;
+                textC = isSel ? const Color(0xFF15803D) : subtitleColor;
+                iconData = Icons.check_circle_outlined;
+              } else if (opt == 'Failed') {
+                bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
+                borderC = isSel ? errorColor : borderColor;
+                textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
+                iconData = Icons.cancel_outlined;
+              }
+
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onChanged(opt),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: bg,
+                      border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(iconData, size: 13, color: textC),
+                        const SizedBox(width: 4),
+                        Text(
+                          opt,
+                          style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildYesNoToggleRow(String label, String? currentVal, Function(String) onChanged) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1534,7 +1844,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
           style: TextStyle(fontSize: 13, color: titleColor),
           decoration: InputDecoration(
             hintText: hint ?? 'Enter $label',
-            hintStyle: TextStyle(color: subtitleColor.withOpacity(0.5), fontSize: 12),
+            hintStyle: TextStyle(color: subtitleColor.withValues(alpha: 0.5), fontSize: 12),
             filled: true,
             fillColor: inputBgColor,
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -1554,7 +1864,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       border: Border.all(color: borderColor, width: 1),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.02),
+          color: Colors.black.withValues(alpha: 0.02),
           blurRadius: 8,
           offset: const Offset(0, 2),
         ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
-import '../../widgets/fsic_certificate_preview_modal.dart';
 import 'view_inspection_form_dialog.dart';
 
 class EstablishmentDirectoryScreen extends StatefulWidget {
@@ -20,8 +19,6 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
   static const Color colorAccent = Color(0xFFEA580C);
   static const Color colorBorder = Color(0xFFE2E8F0);
   static const Color colorSuccess = Color(0xFF16A34A);
-  static const Color colorWarning = Color(0xFFD97706);
-  static const Color colorError = Color(0xFFDC2626);
 
   final TextEditingController _searchController = TextEditingController();
   String _selectedBarangay = 'All Barangays';
@@ -34,7 +31,8 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
     'FSIC Issued',
     'NTC Issued',
     'NTCV Issued',
-    'Pending',
+    'NOD Issued',
+    'Pending Inspection',
   ];
 
   @override
@@ -55,46 +53,244 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
     });
   }
 
+  String _extractBarangay(String? address) {
+    if (address == null || address.trim().isEmpty) return 'Poblacion';
+    final lowerAddr = address.toLowerCase();
+    for (var b in SupabaseService.lingayenBarangays) {
+      if (lowerAddr.contains(b.toLowerCase())) {
+        return b;
+      }
+    }
+    return 'Poblacion';
+  }
+
+  String _normalizeComplianceStatus(String? recommendation, String? complianceStatus) {
+    final rec = (recommendation ?? '').toUpperCase().trim();
+    final comp = (complianceStatus ?? '').toUpperCase().trim();
+    final combined = '$rec $comp';
+
+    if (combined.contains('FSIC') || combined.contains('ISSUANCE') || combined.contains('PASS') || combined.contains('COMPLIANT')) {
+      return 'FSIC Issued';
+    }
+    if (combined.contains('NTCV') || combined.contains('VIOLATION')) {
+      return 'NTCV Issued';
+    }
+    if (combined.contains('NTC') || combined.contains('COMPLY') || combined.contains('NOTICE TO COMPLY') || combined.contains('NOTICETOCOMPLY')) {
+      return 'NTC Issued';
+    }
+    if (combined.contains('NOD') || combined.contains('DISAPPROVAL')) {
+      return 'NOD Issued';
+    }
+    return 'Pending Inspection';
+  }
+
   Future<List<Map<String, dynamic>>> _fetchEstablishments() async {
     try {
       final client = Supabase.instance.client;
-      List<Map<String, dynamic>> items = [];
 
-      // Query public.establishments directly
+      // 1. Fetch registered establishments from public.establishments
+      List<Map<String, dynamic>> rawEstablishments = [];
       try {
         final estResponse = await client.from('establishments').select().order('created_at', ascending: false);
-        items = List<Map<String, dynamic>>.from(estResponse);
+        rawEstablishments = List<Map<String, dynamic>>.from(estResponse);
       } catch (e) {
         debugPrint('Establishments table note: $e');
       }
 
-      // If establishments is empty, fallback to querying unique commercial establishments from public.inspections
-      if (items.isEmpty) {
+      // 2. Fetch all inspections from public.inspections
+      List<Map<String, dynamic>> rawInspections = [];
+      try {
         final insResponse = await client.from('inspections').select().order('created_at', ascending: false);
-        final Map<String, Map<String, dynamic>> uniqueMap = {};
-        for (var item in insResponse) {
-          final bName = item['business_name']?.toString() ?? 'Commercial Establishment';
-          if (!uniqueMap.containsKey(bName)) {
-            uniqueMap[bName] = {
-              'id': item['id'],
-              'business_name': bName,
-              'address': item['address'] ?? 'Lingayen, Pangasinan',
-              'barangay': item['checklist_data']?['barangay'] ?? 'Poblacion',
-              'occupancy_type': item['checklist_data']?['occupancy'] ?? 'Mercantile',
-              'owner_name': item['checklist_data']?['owner_name'] ?? 'N/A',
-              'contact_no': item['checklist_data']?['contact'] ?? 'N/A',
-              'compliance_status': item['recommendation'] ?? item['compliance_status'] ?? 'FSIC Issued',
-              'inspection_order_no': item['inspection_order_no'] ?? 'IO-2026',
-              'last_inspection_date': item['date_inspected'] ?? item['created_at'],
-            };
-          }
-        }
-        items = uniqueMap.values.toList();
+        rawInspections = List<Map<String, dynamic>>.from(insResponse);
+      } catch (e) {
+        debugPrint('Inspections table note: $e');
       }
 
+      // 3. Build lookup maps for latest inspections
+      final Map<String, Map<String, dynamic>> latestInspByEstId = {};
+      final Map<String, Map<String, dynamic>> latestInspByNameAndBrgy = {};
+      final Map<String, Map<String, dynamic>> latestInspByName = {};
+
+      for (var ins in rawInspections) {
+        final estId = ins['establishment_id']?.toString().trim();
+        final bName = ins['business_name']?.toString().trim() ?? '';
+        final bNameKey = bName.toLowerCase();
+
+        final chk = ins['checklist_data'] is Map<String, dynamic> ? ins['checklist_data'] as Map<String, dynamic> : {};
+        final genInfo = chk['generalInfo'] is Map<String, dynamic> ? chk['generalInfo'] as Map<String, dynamic> : {};
+        final bldgSpecs = chk['buildingSpecifications'] is Map<String, dynamic> ? chk['buildingSpecifications'] as Map<String, dynamic> : {};
+
+        final address = ins['address']?.toString() ?? genInfo['address']?.toString() ?? 'Lingayen, Pangasinan';
+        final brgy = chk['barangay']?.toString() ?? _extractBarangay(address);
+        final nameAndBrgyKey = '$bNameKey|${brgy.toLowerCase()}';
+
+        final owner = genInfo['ownerRepresentative']?.toString().trim() ??
+            chk['owner_name']?.toString().trim() ??
+            ins['owner_name']?.toString().trim() ??
+            'N/A';
+        final contact = genInfo['contactNo']?.toString().trim() ??
+            chk['contact']?.toString().trim() ??
+            ins['contact_no']?.toString().trim() ??
+            'N/A';
+        final occupancy = bldgSpecs['occupancyClassification']?.toString() ??
+            genInfo['natureOfBusiness']?.toString() ??
+            chk['occupancy']?.toString() ??
+            'Commercial';
+
+        final status = _normalizeComplianceStatus(
+          ins['recommendation']?.toString(),
+          ins['compliance_status']?.toString(),
+        );
+
+        final processedInsp = {
+          'inspection_id': ins['id'],
+          'business_name': bName.isNotEmpty ? bName : 'Commercial Business',
+          'address': address,
+          'barangay': brgy,
+          'occupancy_type': occupancy,
+          'owner_name': owner.isNotEmpty ? owner : 'N/A',
+          'contact_no': contact.isNotEmpty ? contact : 'N/A',
+          'compliance_status': status,
+          'inspection_order_no': ins['inspection_order_no'] ?? genInfo['fsecNo'] ?? chk['ioNumber'] ?? 'IO-2026',
+          'last_inspection_date': ins['date_inspected'] ?? ins['created_at'],
+        };
+
+        if (estId != null && estId.isNotEmpty && !latestInspByEstId.containsKey(estId)) {
+          latestInspByEstId[estId] = processedInsp;
+        }
+        if (bNameKey.isNotEmpty && !latestInspByNameAndBrgy.containsKey(nameAndBrgyKey)) {
+          latestInspByNameAndBrgy[nameAndBrgyKey] = processedInsp;
+        }
+        if (bNameKey.isNotEmpty && !latestInspByName.containsKey(bNameKey)) {
+          latestInspByName[bNameKey] = processedInsp;
+        }
+      }
+
+      final List<Map<String, dynamic>> items = [];
+      final Set<String> matchedInspectionIds = {};
+
+      // 4. Process all establishments from public.establishments
+      for (var est in rawEstablishments) {
+        final estId = est['id']?.toString() ?? '';
+        final name = (est['name'] ?? est['business_name'] ?? '').toString().trim();
+        final addr = est['address']?.toString() ?? 'Lingayen, Pangasinan';
+        final brgy = est['barangay']?.toString() ?? _extractBarangay(addr);
+        final occ = est['nature_of_business'] ?? est['occupancy_classification'] ?? 'Commercial';
+
+        Map<String, dynamic>? matchedInsp;
+        if (estId.isNotEmpty && latestInspByEstId.containsKey(estId)) {
+          matchedInsp = latestInspByEstId[estId];
+        } else {
+          final nameAndBrgyKey = '${name.toLowerCase()}|${brgy.toLowerCase()}';
+          if (latestInspByNameAndBrgy.containsKey(nameAndBrgyKey)) {
+            matchedInsp = latestInspByNameAndBrgy[nameAndBrgyKey];
+          } else if (latestInspByName.containsKey(name.toLowerCase())) {
+            matchedInsp = latestInspByName[name.toLowerCase()];
+          }
+        }
+
+        if (matchedInsp != null) {
+          matchedInspectionIds.add(matchedInsp['inspection_id']?.toString() ?? '');
+          items.add({
+            'id': estId.isNotEmpty ? estId : matchedInsp['inspection_id'],
+            'establishment_id': estId,
+            'inspection_id': matchedInsp['inspection_id'],
+            'has_inspection': true,
+            'business_name': name.isNotEmpty ? name : matchedInsp['business_name'],
+            'address': addr.isNotEmpty ? addr : matchedInsp['address'],
+            'barangay': brgy.isNotEmpty ? brgy : matchedInsp['barangay'],
+            'occupancy_type': occ.toString().isNotEmpty ? occ : matchedInsp['occupancy_type'],
+            'owner_name': matchedInsp['owner_name'],
+            'contact_no': matchedInsp['contact_no'],
+            'compliance_status': matchedInsp['compliance_status'],
+            'inspection_order_no': matchedInsp['inspection_order_no'],
+            'last_inspection_date': matchedInsp['last_inspection_date'],
+          });
+        } else {
+          items.add({
+            'id': estId,
+            'establishment_id': estId,
+            'inspection_id': null,
+            'has_inspection': false,
+            'business_name': name.isNotEmpty ? name : 'Commercial Establishment',
+            'address': addr,
+            'barangay': brgy,
+            'occupancy_type': occ,
+            'owner_name': 'N/A',
+            'contact_no': 'N/A',
+            'compliance_status': 'Pending Inspection',
+            'inspection_order_no': 'N/A',
+            'last_inspection_date': est['created_at'],
+          });
+        }
+      }
+
+      // 5. Add unique commercial establishments from inspections that were not in establishments table
+      final Map<String, Map<String, dynamic>> extraBusinesses = {};
+      for (var insp in rawInspections) {
+        final inspId = insp['id']?.toString() ?? '';
+        if (matchedInspectionIds.contains(inspId)) continue;
+
+        final bName = insp['business_name']?.toString().trim() ?? '';
+        if (bName.isEmpty) continue;
+
+        final chk = insp['checklist_data'] is Map<String, dynamic> ? insp['checklist_data'] as Map<String, dynamic> : {};
+        final genInfo = chk['generalInfo'] is Map<String, dynamic> ? chk['generalInfo'] as Map<String, dynamic> : {};
+        final bldgSpecs = chk['buildingSpecifications'] is Map<String, dynamic> ? chk['buildingSpecifications'] as Map<String, dynamic> : {};
+        final addr = insp['address']?.toString() ?? genInfo['address']?.toString() ?? 'Lingayen, Pangasinan';
+        final brgy = chk['barangay']?.toString() ?? _extractBarangay(addr);
+        final uniqueKey = '${bName.toLowerCase()}|${brgy.toLowerCase()}';
+
+        if (!extraBusinesses.containsKey(uniqueKey)) {
+          final owner = genInfo['ownerRepresentative']?.toString().trim() ??
+              chk['owner_name']?.toString().trim() ??
+              insp['owner_name']?.toString().trim() ??
+              'N/A';
+          final contact = genInfo['contactNo']?.toString().trim() ??
+              chk['contact']?.toString().trim() ??
+              insp['contact_no']?.toString().trim() ??
+              'N/A';
+          final occupancy = bldgSpecs['occupancyClassification']?.toString() ??
+              genInfo['natureOfBusiness']?.toString() ??
+              chk['occupancy']?.toString() ??
+              'Mercantile';
+
+          final status = _normalizeComplianceStatus(
+            insp['recommendation']?.toString(),
+            insp['compliance_status']?.toString(),
+          );
+
+          extraBusinesses[uniqueKey] = {
+            'id': inspId,
+            'establishment_id': null,
+            'inspection_id': inspId,
+            'has_inspection': true,
+            'business_name': bName,
+            'address': addr,
+            'barangay': brgy,
+            'occupancy_type': occupancy,
+            'owner_name': owner.isNotEmpty ? owner : 'N/A',
+            'contact_no': contact.isNotEmpty ? contact : 'N/A',
+            'compliance_status': status,
+            'inspection_order_no': insp['inspection_order_no'] ?? genInfo['fsecNo'] ?? chk['ioNumber'] ?? 'IO-2026',
+            'last_inspection_date': insp['date_inspected'] ?? insp['created_at'],
+          };
+        }
+      }
+
+      items.addAll(extraBusinesses.values);
+
+      // Sort by last inspection date or created_at descending
+      items.sort((a, b) {
+        final dateA = (a['last_inspection_date'] ?? '').toString();
+        final dateB = (b['last_inspection_date'] ?? '').toString();
+        return dateB.compareTo(dateA);
+      });
+
       // Filter by Barangay
+      List<Map<String, dynamic>> filteredItems = items;
       if (_selectedBarangay != 'All Barangays') {
-        items = items.where((e) {
+        filteredItems = filteredItems.where((e) {
           final brgy = (e['barangay'] ?? e['address'] ?? '').toString().toLowerCase();
           return brgy.contains(_selectedBarangay.toLowerCase());
         }).toList();
@@ -102,29 +298,40 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
 
       // Filter by Compliance Status
       if (_selectedStatus != 'All Statuses') {
-        items = items.where((e) {
-          final st = (e['compliance_status'] ?? e['status'] ?? '').toString().toLowerCase();
+        filteredItems = filteredItems.where((e) {
+          final st = (e['compliance_status'] ?? '').toString().toLowerCase();
           final target = _selectedStatus.toLowerCase();
-          if (target.contains('fsic')) return st.contains('fsic') || st.contains('pass') || st.contains('completed');
-          if (target.contains('ntcv')) return st.contains('ntcv') || st.contains('violation');
-          if (target.contains('ntc')) return st.contains('ntc') || st.contains('comply');
-          return st.contains('pending');
+          if (target.contains('fsic')) return st.contains('fsic');
+          if (target.contains('ntcv')) return st.contains('ntcv');
+          if (target.contains('ntc')) return st == 'ntc issued' || (st.contains('ntc') && !st.contains('ntcv'));
+          if (target.contains('nod')) return st.contains('nod');
+          if (target.contains('pending')) return st.contains('pending');
+          return st == target;
         }).toList();
       }
 
       // Search Query Filter
       final q = _searchController.text.trim().toLowerCase();
       if (q.isNotEmpty) {
-        items = items.where((e) {
-          final bName = (e['business_name'] ?? '').toString().toLowerCase();
+        filteredItems = filteredItems.where((e) {
+          final bName = (e['business_name'] ?? e['name'] ?? '').toString().toLowerCase();
           final owner = (e['owner_name'] ?? '').toString().toLowerCase();
           final addr = (e['address'] ?? '').toString().toLowerCase();
+          final brgy = (e['barangay'] ?? '').toString().toLowerCase();
           final ioNo = (e['inspection_order_no'] ?? '').toString().toLowerCase();
-          return bName.contains(q) || owner.contains(q) || addr.contains(q) || ioNo.contains(q);
+          final occ = (e['occupancy_type'] ?? '').toString().toLowerCase();
+          final st = (e['compliance_status'] ?? '').toString().toLowerCase();
+          return bName.contains(q) ||
+              owner.contains(q) ||
+              addr.contains(q) ||
+              brgy.contains(q) ||
+              ioNo.contains(q) ||
+              occ.contains(q) ||
+              st.contains(q);
         }).toList();
       }
 
-      return items;
+      return filteredItems;
     } catch (e) {
       debugPrint('Error fetching establishment directory: $e');
       return [];
@@ -141,19 +348,16 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
   }
 
   void _showInspectionForm(Map<String, dynamic> est) {
+    final inspectionId = est['inspection_id']?.toString() ?? est['id']?.toString();
     showDialog(
       context: context,
       builder: (context) => ViewInspectionFormDialog(
-        targetInspectionId: est['id']?.toString(),
+        targetInspectionId: inspectionId,
         initialData: est,
       ),
     );
   }
 
-  bool _isInspectionDone(String status) {
-    final s = status.toLowerCase();
-    return s.contains('fsic') || s.contains('pass') || s.contains('completed') || s.contains('compliant');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +464,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _selectedStatus,
+                  value: _statusOptions.contains(_selectedStatus) ? _selectedStatus : _statusOptions.first,
                   items: _statusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)))).toList(),
                   onChanged: (val) {
                     if (val != null) {
@@ -341,12 +545,12 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
           separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
             final est = list[index];
-            final bName = est['business_name'] ?? 'Commercial Business';
-            final addr = est['address'] ?? 'Lingayen, Pangasinan';
-            final owner = est['owner_name'] ?? 'N/A';
-            final occupancy = est['occupancy_type'] ?? 'Mercantile';
-            final status = est['compliance_status'] ?? est['status'] ?? 'FSIC Issued';
-            final bool isDone = _isInspectionDone(status);
+            final bName = (est['business_name'] ?? est['name'] ?? 'Commercial Business').toString().trim();
+            final addr = (est['address'] ?? 'Lingayen, Pangasinan').toString().trim();
+            final owner = (est['owner_name'] ?? 'N/A').toString().trim();
+            final occupancy = (est['occupancy_type'] ?? est['nature_of_business'] ?? est['occupancy_classification'] ?? 'Commercial').toString().trim();
+            final status = (est['compliance_status'] ?? 'Pending Inspection').toString().trim();
+            final bool hasForm = est['has_inspection'] == true && est['inspection_id'] != null;
 
             return InkWell(
               onTap: () => _showEstablishmentDetails(est),
@@ -420,7 +624,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
                         ),
                       ],
                     ),
-                    if (isDone) ...[
+                    if (hasForm) ...[
                       const SizedBox(height: 10),
                       const Divider(height: 1, color: colorBorder),
                       const SizedBox(height: 10),
@@ -461,15 +665,15 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
   }
 
   Widget _buildDetailModal(Map<String, dynamic> est) {
-    final bName = est['business_name'] ?? 'Commercial Business';
-    final addr = est['address'] ?? 'Lingayen, Pangasinan';
-    final owner = est['owner_name'] ?? 'N/A';
-    final contact = est['contact_no'] ?? 'N/A';
-    final occupancy = est['occupancy_type'] ?? 'Mercantile';
-    final status = est['compliance_status'] ?? est['status'] ?? 'FSIC Issued';
+    final bName = (est['business_name'] ?? est['name'] ?? 'Commercial Business').toString().trim();
+    final addr = (est['address'] ?? 'Lingayen, Pangasinan').toString().trim();
+    final owner = (est['owner_name'] ?? 'N/A').toString().trim();
+    final contact = (est['contact_no'] ?? 'N/A').toString().trim();
+    final occupancy = (est['occupancy_type'] ?? est['nature_of_business'] ?? est['occupancy_classification'] ?? 'Commercial').toString().trim();
+    final status = (est['compliance_status'] ?? 'Pending Inspection').toString().trim();
     final ioNo = est['inspection_order_no'] ?? 'N/A';
     final lastDate = est['last_inspection_date'] ?? 'Recent';
-    final bool isDone = _isInspectionDone(status);
+    final bool hasForm = est['has_inspection'] == true && est['inspection_id'] != null;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -518,7 +722,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
           _buildDetailRow(Icons.location_on_outlined, 'Address / Barangay', addr),
           _buildDetailRow(Icons.confirmation_number_outlined, 'Latest IO #', ioNo),
           _buildDetailRow(Icons.event_outlined, 'Last Inspected', lastDate.toString().split('T').first),
-          if (isDone) ...[
+          if (hasForm) ...[
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -542,6 +746,28 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorBorder),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.info_outline, size: 18, color: colorTextSecondary),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No completed inspection checklist recorded yet for this establishment.',
+                      style: TextStyle(fontSize: 12, color: colorTextSecondary),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -569,17 +795,19 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
 
   Color _getStatusBgColor(String status) {
     final s = status.toLowerCase();
-    if (s.contains('fsic') || s.contains('pass') || s.contains('completed')) return const Color(0xFFDCFCE7);
+    if (s.contains('fsic') || s.contains('pass') || s.contains('compliant')) return const Color(0xFFDCFCE7);
     if (s.contains('ntcv') || s.contains('violation')) return const Color(0xFFFEE2E2);
     if (s.contains('ntc') || s.contains('comply')) return const Color(0xFFFEF3C7);
+    if (s.contains('nod') || s.contains('disapproval')) return const Color(0xFFFFEDD5);
     return const Color(0xFFF1F5F9);
   }
 
   Color _getStatusTextColor(String status) {
     final s = status.toLowerCase();
-    if (s.contains('fsic') || s.contains('pass') || s.contains('completed')) return const Color(0xFF15803D);
+    if (s.contains('fsic') || s.contains('pass') || s.contains('compliant')) return const Color(0xFF15803D);
     if (s.contains('ntcv') || s.contains('violation')) return const Color(0xFFB91C1C);
     if (s.contains('ntc') || s.contains('comply')) return const Color(0xFFB45309);
-    return const Color(0xFF475569);
+    if (s.contains('nod') || s.contains('disapproval')) return const Color(0xFFC2410C);
+    return const Color(0xFF64748B);
   }
 }

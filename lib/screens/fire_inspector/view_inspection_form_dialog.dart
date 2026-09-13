@@ -70,16 +70,16 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
     CommercialChecklistModel model = CommercialChecklistModel.fromJson(combinedJson);
 
     if (model.businessName.isEmpty) {
-      model.businessName = rawData['business_name']?.toString() ?? 'Commercial Establishment';
+      model.businessName = rawData['business_name']?.toString() ?? rawData['name']?.toString() ?? '';
     }
     if (model.buildingName.isEmpty) {
       model.buildingName = model.businessName;
     }
     if (model.address.isEmpty) {
-      model.address = rawData['address']?.toString() ?? 'Lingayen, Pangasinan';
+      model.address = rawData['address']?.toString() ?? '';
     }
     if (model.ioNumber.isEmpty) {
-      model.ioNumber = rawData['inspection_order_no']?.toString() ?? 'IO-${DateTime.now().year}-001';
+      model.ioNumber = rawData['inspection_order_no']?.toString() ?? '';
     }
     if (model.dateInspected.isEmpty) {
       final dateRaw = rawData['date_inspected'] ?? rawData['created_at'] ?? DateTime.now().toIso8601String();
@@ -94,6 +94,21 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
     }
     if (model.recommendationAction == null || model.recommendationAction!.isEmpty) {
       model.recommendationAction = rawData['recommendation'] ?? rawData['compliance_status'] ?? 'FSIC';
+    }
+
+    if (model.inspectorName.isEmpty && rawData['inspector_id'] != null) {
+      try {
+        final profileRes = await Supabase.instance.client
+            .from('profiles')
+            .select('full_name')
+            .eq('id', rawData['inspector_id'])
+            .maybeSingle();
+        if (profileRes != null && profileRes['full_name'] != null) {
+          model.inspectorName = profileRes['full_name'].toString();
+        }
+      } catch (e) {
+        debugPrint('Error fetching inspector profile: $e');
+      }
     }
 
     return model;
@@ -225,11 +240,11 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                             title: 'Building Specifications & Occupancy',
                             icon: Icons.apartment_outlined,
                             children: [
-                              _buildKeyValueRow('Occupancy Classification', model.occupancyClassification ?? 'Mercantile', badgeColor: Colors.blue.shade700),
-                              _buildKeyValueRow('Construction Type', model.constructionType ?? 'Type I : Concrete & Steel (Fire Resistive)'),
-                              _buildKeyValueRow('Number of Stories', '${model.numberOfStories.isNotEmpty ? model.numberOfStories : '2'} Storey'),
-                              _buildKeyValueRow('Building Height', '${model.buildingHeight.isNotEmpty ? model.buildingHeight : '6'} meters'),
-                              _buildKeyValueRow('Occupant Load', '${model.occupantLoad.isNotEmpty ? model.occupantLoad : '50'} persons/floor'),
+                              _buildKeyValueRow('Occupancy Classification', model.occupancyClassification != null && model.occupancyClassification!.isNotEmpty ? model.occupancyClassification! : 'Unspecified', badgeColor: Colors.blue.shade700),
+                              _buildKeyValueRow('Construction Type', model.constructionType != null && model.constructionType!.isNotEmpty ? model.constructionType! : 'Unspecified'),
+                              _buildKeyValueRow('Number of Stories', model.numberOfStories.isNotEmpty ? '${model.numberOfStories} Storey' : 'N/A'),
+                              _buildKeyValueRow('Building Height', model.buildingHeight.isNotEmpty ? '${model.buildingHeight} meters' : 'N/A'),
+                              _buildKeyValueRow('Occupant Load', model.occupantLoad.isNotEmpty ? '${model.occupantLoad} persons/floor' : 'N/A'),
                               _buildKeyValueRow('High-Rise Building', model.isHighrise == 'Yes' ? 'Yes' : 'No'),
                             ],
                           ),
@@ -250,15 +265,50 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                           ),
                           const SizedBox(height: 14),
 
-                          // Section 5: Deficiencies & Findings
+                          // Section 5: Hazards & Flammable Liquids (Section VII)
+                          if (model.hazardContents.isNotEmpty || model.hazardClassification != null || model.hazardQuantity.isNotEmpty) ...[
+                            _buildSectionCard(
+                              title: 'Hazardous Materials & Storage (Section VII)',
+                              icon: Icons.warning_amber_rounded,
+                              children: [
+                                _buildKeyValueRow('Hazard Contents', model.hazardContents.isNotEmpty ? model.hazardContents : 'N/A'),
+                                _buildKeyValueRow('Quantity', model.hazardQuantity.isNotEmpty ? model.hazardQuantity : 'N/A'),
+                                _buildKeyValueRow('Hazard Placard', model.hazardPlacard.isNotEmpty ? model.hazardPlacard : 'N/A'),
+                                _buildKeyValueRow('Within MAQ', model.withinMaq ?? 'N/A'),
+                                _buildKeyValueRow('Hazard ID #', model.hazardIdentificationNo.isNotEmpty ? model.hazardIdentificationNo : 'N/A'),
+                                _buildKeyValueRow('Hazard Classification', model.hazardClassification ?? 'N/A'),
+                                _buildKeyValueRow('Class', model.hazardClass.isNotEmpty ? model.hazardClass : 'N/A'),
+                                _buildKeyValueRow('Flash Point', model.flashPoint.isNotEmpty ? model.flashPoint : 'N/A'),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
+                          // Section 6: Service Equipment & Fire Wall (Section VIII.J & K)
+                          _buildSectionCard(
+                            title: 'Service Equipment & Fire Wall (Section VIII)',
+                            icon: Icons.construction_outlined,
+                            children: [
+                              _buildKeyValueRow('Utilities (AKHFSS)', model.bseUtilities != null && model.bseUtilities!.isNotEmpty ? model.bseUtilities! : 'N/A'),
+                              _buildKeyValueRow('HVAC / Mechanical', model.bseHvac != null && model.bseHvac!.isNotEmpty ? model.bseHvac! : 'N/A'),
+                              _buildKeyValueRow('Smoke Management System', model.bseSmokeControl != null && model.bseSmokeControl!.isNotEmpty ? model.bseSmokeControl! : 'N/A'),
+                              _buildKeyValueRow('Chutes & Incinerators', model.bseRubbishChutes != null && model.bseRubbishChutes!.isNotEmpty ? model.bseRubbishChutes! : 'N/A'),
+                              _buildKeyValueRow('Fire Wall Provided', model.fireWallProvided != null && model.fireWallProvided!.isNotEmpty ? model.fireWallProvided! : 'N/A'),
+                              _buildKeyValueRow('Fire Wall Extension >= 760mm', model.fireWallExtension != null && model.fireWallExtension!.isNotEmpty ? model.fireWallExtension! : 'N/A'),
+                              _buildKeyValueRow('Fire Wall Construction Type', model.fireWallType != null && model.fireWallType!.isNotEmpty ? model.fireWallType! : 'N/A'),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Section 7: Deficiencies & Findings
                           _buildDeficienciesCard(model),
                           const SizedBox(height: 14),
 
-                          // Section 6: Recommendations
+                          // Section 8: Recommendations
                           _buildRecommendationsCard(model),
                           const SizedBox(height: 14),
 
-                          // Section 7: Signatories
+                          // Section 9: Signatories
                           _buildSignatoriesCard(model),
                         ],
                       ),
@@ -643,7 +693,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               Expanded(
                 child: _buildSignatoryBox(
                   'Owner / Representative',
-                  model.ownerRepresentative.isNotEmpty ? model.ownerRepresentative : 'Owner Signature',
+                  model.ownerRepresentative.isNotEmpty ? model.ownerRepresentative : 'Pending Signature',
                   Icons.person_pin_outlined,
                 ),
               ),
@@ -651,7 +701,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               Expanded(
                 child: _buildSignatoryBox(
                   'Fire Safety Inspector',
-                  model.inspectorName.isNotEmpty ? model.inspectorName : 'Inspector on Duty',
+                  model.inspectorName.isNotEmpty ? model.inspectorName : 'Unassigned',
                   Icons.badge_outlined,
                 ),
               ),
@@ -663,7 +713,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               Expanded(
                 child: _buildSignatoryBox(
                   'FSES Team Leader',
-                  model.teamLeaderName.isNotEmpty ? model.teamLeaderName : 'Team Leader',
+                  model.teamLeaderName.isNotEmpty ? model.teamLeaderName : 'Unassigned',
                   Icons.shield_outlined,
                 ),
               ),
@@ -671,7 +721,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
               Expanded(
                 child: _buildSignatoryBox(
                   'City / Municipal Fire Marshal',
-                  model.fireMarshalName.isNotEmpty ? model.fireMarshalName : 'CINSP Fire Marshal',
+                  model.fireMarshalName.isNotEmpty ? model.fireMarshalName : 'Pending Admin Approval',
                   Icons.military_tech_outlined,
                 ),
               ),

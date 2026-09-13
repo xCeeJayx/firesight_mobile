@@ -150,4 +150,208 @@ void main() {
     final bytes = await pdfDoc.save();
     expect(bytes.isNotEmpty, isTrue);
   });
+
+  test('InspectionChecklistPdfService strictly handles N/A and uninspected items without defaulting to passed', () async {
+    final model = CommercialChecklistModel(
+      ioNumber: 'IO-NA-TEST',
+      dateIssued: '2026-08-01',
+      dateInspected: '2026-08-10',
+      inspectionNature: 'BusinessPermit',
+      buildingName: 'NA Test Building',
+      address: 'Lingayen, Pangasinan',
+      businessName: 'NA Test Shop',
+      natureOfBusiness: 'Retail',
+      ownerRepresentative: 'Test Owner',
+      contactNo: '09123456789',
+      // Explicit N/A and uninspected items
+      egressAccessStatus: {
+        'Doors': 'Passed',
+        'Ramps': 'Failed',
+        'Dead end': 'N/A',
+        'Lobby / Anteroom': '', // Uninspected
+      },
+      exitSignageStatus: {
+        'Minimum letter height, 150 mm': 'N/A',
+        'EXIT signs properly illuminated': 'Passed',
+      },
+      fireProtectionStatus: {
+        'Hose Condition - Not rotted, wet, or moldy': 'N/A',
+        'Sprinkler Pumps - Check automatic start and pressure': 'Passed',
+      },
+      hazardStatus: {
+        'Properly dispensed as per SOP': 'N/A',
+      },
+      // Recommendation is Notice of Disapproval (NOD)
+      recommendationAction: 'NOD',
+      defectsSummary: 'Defects found during inspection',
+      defectsItemIV: 'Defect in Means of Egress',
+      defectsItemV: 'Defect in Compartmentation',
+      defectsItemVI: 'Defect in Fire Protection',
+      defectsItemVII: 'Defect in Hazards',
+      defectsItemVIII: 'Defect in Miscellaneous',
+      // Section VII Hazards
+      hazardContents: 'Diesel and Lubricant Oil',
+      hazardQuantity: '200 Liters',
+      hazardPlacard: 'Class 3 Flammable Liquid',
+      withinMaq: 'Yes',
+      hazardIdentificationNo: 'UN 1202',
+      hazardClassification: 'Flammable Liquid',
+      hazardClass: 'Class II',
+      flashPoint: '55°C',
+      // Section VIII.J Building Service Equipment
+      bseUtilities: 'Passed',
+      bseHvac: 'Passed',
+      bseSmokeControl: 'Failed',
+      bseRubbishChutes: 'N/A',
+      // Section VIII.K Fire Wall
+      fireWallProvided: 'Yes',
+      fireWallExtension: '1000 mm',
+      fireWallType: '2-hour fire resistive concrete',
+      // Signatories policy: Empty marshal name (to be approved on web admin)
+      inspectorName: 'FO1 John Doe',
+      teamLeaderName: '',
+      fireMarshalName: '',
+    );
+
+    // Verify model fields
+    expect(model.bseUtilities, equals('Passed'));
+    expect(model.bseSmokeControl, equals('Failed'));
+    expect(model.bseRubbishChutes, equals('N/A'));
+    expect(model.fireWallProvided, equals('Yes'));
+    expect(model.hazardContents, equals('Diesel and Lubricant Oil'));
+    expect(model.withinMaq, equals('Yes'));
+    expect(model.fireMarshalName, isEmpty);
+
+    // Verify JSON serialization and deserialization
+    final json = model.toJson();
+    final restoredModel = CommercialChecklistModel.fromJson(json);
+    expect(restoredModel.bseUtilities, equals('Passed'));
+    expect(restoredModel.bseSmokeControl, equals('Failed'));
+    expect(restoredModel.bseRubbishChutes, equals('N/A'));
+    expect(restoredModel.hazardContents, equals('Diesel and Lubricant Oil'));
+    expect(restoredModel.fireWallProvided, equals('Yes'));
+    expect(restoredModel.defectsItemIV, equals('Defect in Means of Egress'));
+    expect(restoredModel.fireMarshalName, isEmpty);
+
+    // Build PDF and verify all 10 pages render cleanly
+    final pdfDoc = await InspectionChecklistPdfService.buildDocument(model);
+    expect(pdfDoc.document.pdfPageList.pages.length, equals(10));
+
+    final bytes = await pdfDoc.save();
+    expect(bytes.isNotEmpty, isTrue);
+    expect(bytes.length, greaterThan(1000));
+  });
+
+  test('InspectionChecklistPdfService parses and builds Batangina Liptint Shop Supabase payload with NOD recommendation', () async {
+    final batanginaRow = {
+      'id': '7b8d0f9d-3d7a-4d48-83d7-9861dc039d0b',
+      'inspection_order_no': 'IO-2026-004',
+      'business_name': 'Batangina Liptint Shop',
+      'overall_status': 'Completed',
+      'compliance_status': 'NOD',
+      'recommendation': 'NOD',
+      'checklist_data': {
+        'ioNumber': 'IO-2026-004',
+        'dateIssued': '2026-08-20',
+        'dateInspected': '2026-08-28',
+        'checklist_type': 'commercial',
+        'inspectionNature': 'FSIC for Business Permit (New/Renewal)',
+        'fsmrRequired': 'No',
+        'fsccrRequired': 'No',
+        'generalInfo': {
+          'buildingName': 'Mami Oni Bldg',
+          'businessName': 'Batangina Liptint Shop',
+          'address': 'Ramos St. Poblacion, Lingayen Pangasinan',
+          'natureOfBusiness': 'Retail',
+          'ownerRepresentative': 'Baby Jean',
+          'contactNo': '09123456789',
+          'fsecNo': '',
+          'fsecDateIssued': '',
+          'buildingPermitNo': '',
+          'buildingPermitDateIssued': '',
+          'fsicNoLatest': '',
+          'fsicDateIssued': '',
+          'fireDrillCertNo': '',
+          'fireDrillDateIssued': '',
+          'businessPermitNo': '',
+          'businessPermitDateIssued': '',
+          'fireInsurancePolicyNo': '',
+          'fireInsuranceDateIssued': '',
+        },
+        'buildingSpecifications': {
+          'constructionType': 'Type II: Concrete & Exposed Steel (Noncombustible)',
+          'interiorFinishWalls': 'Class B: Flame spread 26-75',
+          'interiorFinishFloor': 'Class II: Critical radiant flux 0.22 - 0.45 W/cm2',
+          'occupancyClassification': 'Mercantile',
+          'occupantLoad': '',
+          'numberOfStories': '',
+          'buildingHeight': '',
+          'isHighrise': 'No',
+          'sectionalOccupancy': {
+            'basement': '',
+            'groundFloor': '',
+            'secondFloor': '',
+            'thirdFloor': '',
+            'fourthFloor': '',
+            'nthFloor': '',
+          },
+        },
+        'signatories': {
+          'inspectorName': 'Song Kang Kong',
+          'teamLeaderName': 'King Badger',
+          'fireMarshalName': 'Xian Gaza',
+        },
+        'defectsSummary': 'test',
+        'recommendationAction': 'NOD',
+        'hazardStatus': {
+          'Properly dispensed as per SOP': 'Failed',
+          'Provided with "NO SMOKING" sign': 'Failed',
+          'Stored in sealed metal containers': 'Failed',
+          'All no smoking areas have adequate signs': 'Failed',
+          'Dry leaves, shrubbery trimmings kept away from buildings': 'Failed',
+          'Gasoline / Diesel stored in proper place & metal safety can': 'Failed',
+          'Brooms, mops, rags stored in metal cabinets or approved cans': 'Failed',
+          'Paints, solvents stored in metal cabinet; oily rags in metal containers': 'Failed',
+        },
+        'itemDimensions': {
+          'Doors': '5',
+          'Passageways': '55',
+          'Corridors / Hallways': '5',
+        },
+        'egressAccessStatus': {
+          'Doors': 'Failed',
+          'Ramps': 'Failed',
+          'Dead end': 'Failed',
+          'Passageways': 'Failed',
+          'Travel distance': 'Failed',
+          'Lobby / Anteroom': 'Failed',
+          'Corridors / Hallways': 'Failed',
+          'Common path of travel': 'Failed',
+        },
+      }
+    };
+
+    final combined = Map<String, dynamic>.from(batanginaRow);
+    if (batanginaRow['checklist_data'] is Map<String, dynamic>) {
+      combined.addAll(batanginaRow['checklist_data'] as Map<String, dynamic>);
+    }
+
+    final model = CommercialChecklistModel.fromJson(combined);
+
+    expect(model.businessName, equals('Batangina Liptint Shop'));
+    expect(model.recommendationAction, equals('NOD'));
+    expect(model.occupantLoad, isEmpty);
+    expect(model.numberOfStories, isEmpty);
+    expect(model.buildingHeight, isEmpty);
+    expect(model.inspectorName, equals('Song Kang Kong'));
+    expect(model.egressAccessStatus['Doors'], equals('Failed'));
+    expect(model.hazardStatus['Properly dispensed as per SOP'], equals('Failed'));
+
+    final pdfDoc = await InspectionChecklistPdfService.buildDocument(model);
+    expect(pdfDoc.document.pdfPageList.pages.length, equals(10));
+
+    final bytes = await pdfDoc.save();
+    expect(bytes.isNotEmpty, isTrue);
+  });
 }
+

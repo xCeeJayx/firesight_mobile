@@ -67,14 +67,43 @@ class CommercialChecklistModel {
   Map<String, String> hazardStatus;
   Map<String, String> fireProtectionStatus;
 
-  // Dimensions & Width Inputs
+  // VII. HAZARDS - Specific Fields
+  String hazardContents;
+  String hazardQuantity;
+  String hazardPlacard;
+  String? withinMaq; // 'Yes', 'No'
+  String hazardIdentificationNo;
+  String? hazardClassification; // 'Low', 'Ordinary', 'High'
+  String hazardClass;
+  String flashPoint;
+
+  // VIII. J. BUILDING SERVICE EQUIPMENT
+  String? bseUtilities; // 'Passed', 'Failed', 'N/A'
+  String? bseHvac; // 'Passed', 'Failed', 'N/A'
+  String? bseSmokeControl; // 'Passed', 'Failed', 'N/A'
+  String? bseRubbishChutes; // 'Passed', 'Failed', 'N/A'
+
+  // VIII. K. FIRE WALL
+  String? fireWallProvided; // 'Yes', 'No'
+  String? fireWallExtension; // 'Yes', 'No'
+  String? fireWallType; // '125mm Solid Concrete', '150mm Solid Masonry', '200mm Hollow Unit Masonry'
+
+  // Dimensions & Width Inputs & Remarks
   Map<String, String> itemDimensions;
+  Map<String, String> itemRemarks;
 
   // IX. DEFECTS & RECOMMENDATIONS
   String defectsSummary;
+  String defectsItemIV;
+  String defectsItemV;
+  String defectsItemVI;
+  String defectsItemVII;
+  String defectsItemVIII;
+
   String? recommendationAction; // 'FSIC', 'NoticeToComply', 'NoticeToCorrectViolation', 'ClosureOrder', 'AbatementOrder', 'NOD'
   String inspectorName;
   String teamLeaderName;
+  String chiefFsedName;
   String fireMarshalName;
 
   CommercialChecklistModel({
@@ -124,11 +153,33 @@ class CommercialChecklistModel {
     Map<String, String>? exitSignageStatus,
     Map<String, String>? hazardStatus,
     Map<String, String>? fireProtectionStatus,
+    this.hazardContents = '',
+    this.hazardQuantity = '',
+    this.hazardPlacard = '',
+    this.withinMaq,
+    this.hazardIdentificationNo = '',
+    this.hazardClassification,
+    this.hazardClass = '',
+    this.flashPoint = '',
+    this.bseUtilities,
+    this.bseHvac,
+    this.bseSmokeControl,
+    this.bseRubbishChutes,
+    this.fireWallProvided,
+    this.fireWallExtension,
+    this.fireWallType,
     Map<String, String>? itemDimensions,
+    Map<String, String>? itemRemarks,
     this.defectsSummary = '',
+    this.defectsItemIV = '',
+    this.defectsItemV = '',
+    this.defectsItemVI = '',
+    this.defectsItemVII = '',
+    this.defectsItemVIII = '',
     this.recommendationAction,
     this.inspectorName = '',
     this.teamLeaderName = '',
+    this.chiefFsedName = '',
     this.fireMarshalName = '',
   })  : egressAccessStatus = egressAccessStatus ?? {},
         exitComponentsStatus = exitComponentsStatus ?? {},
@@ -136,7 +187,8 @@ class CommercialChecklistModel {
         exitSignageStatus = exitSignageStatus ?? {},
         hazardStatus = hazardStatus ?? {},
         fireProtectionStatus = fireProtectionStatus ?? {},
-        itemDimensions = itemDimensions ?? {};
+        itemDimensions = itemDimensions ?? {},
+        itemRemarks = itemRemarks ?? {};
 
   Map<String, dynamic> toJson() {
     return {
@@ -192,12 +244,42 @@ class CommercialChecklistModel {
       'exitSignageStatus': exitSignageStatus,
       'hazardStatus': hazardStatus,
       'fireProtectionStatus': fireProtectionStatus,
+      'hazardInfo': {
+        'hazardContents': hazardContents,
+        'hazardQuantity': hazardQuantity,
+        'hazardPlacard': hazardPlacard,
+        'withinMaq': withinMaq,
+        'hazardIdentificationNo': hazardIdentificationNo,
+        'hazardClassification': hazardClassification,
+        'hazardClass': hazardClass,
+        'flashPoint': flashPoint,
+      },
+      'buildingServiceEquipment': {
+        'utilities': bseUtilities,
+        'hvac': bseHvac,
+        'smokeControl': bseSmokeControl,
+        'rubbishChutes': bseRubbishChutes,
+      },
+      'fireWallInfo': {
+        'provided': fireWallProvided,
+        'extension': fireWallExtension,
+        'wallType': fireWallType,
+      },
       'itemDimensions': itemDimensions,
+      'itemRemarks': itemRemarks,
       'defectsSummary': defectsSummary,
+      'itemizedDefects': {
+        'itemIV': defectsItemIV,
+        'itemV': defectsItemV,
+        'itemVI': defectsItemVI,
+        'itemVII': defectsItemVII,
+        'itemVIII': defectsItemVIII,
+      },
       'recommendationAction': recommendationAction,
       'signatories': {
         'inspectorName': inspectorName,
         'teamLeaderName': teamLeaderName,
+        'chiefFsedName': chiefFsedName,
         'fireMarshalName': fireMarshalName,
       },
     };
@@ -208,6 +290,10 @@ class CommercialChecklistModel {
     final spec = json['buildingSpecifications'] as Map<String, dynamic>? ?? {};
     final secOcc = spec['sectionalOccupancy'] as Map<String, dynamic>? ?? (json['sectionalOccupancy'] as Map<String, dynamic>? ?? {});
     final sig = json['signatories'] as Map<String, dynamic>? ?? (json['signatories'] is Map ? Map<String, dynamic>.from(json['signatories']) : {});
+    final haz = json['hazardInfo'] as Map<String, dynamic>? ?? {};
+    final bse = json['buildingServiceEquipment'] as Map<String, dynamic>? ?? {};
+    final fw = json['fireWallInfo'] as Map<String, dynamic>? ?? {};
+    final itmDef = json['itemizedDefects'] as Map<String, dynamic>? ?? {};
 
     return CommercialChecklistModel(
       ioNumber: (json['ioNumber'] ?? json['inspection_order_no'] ?? gen['ioNumber'] ?? '').toString(),
@@ -256,11 +342,33 @@ class CommercialChecklistModel {
       exitSignageStatus: Map<String, String>.from(json['exitSignageStatus'] ?? json['exit_signage_status'] ?? {}),
       hazardStatus: Map<String, String>.from(json['hazardStatus'] ?? json['hazard_status'] ?? {}),
       fireProtectionStatus: Map<String, String>.from(json['fireProtectionStatus'] ?? json['fire_protection_status'] ?? {}),
+      hazardContents: (haz['hazardContents'] ?? json['hazardContents'] ?? '').toString(),
+      hazardQuantity: (haz['hazardQuantity'] ?? json['hazardQuantity'] ?? '').toString(),
+      hazardPlacard: (haz['hazardPlacard'] ?? json['hazardPlacard'] ?? '').toString(),
+      withinMaq: haz['withinMaq']?.toString() ?? json['withinMaq']?.toString(),
+      hazardIdentificationNo: (haz['hazardIdentificationNo'] ?? json['hazardIdentificationNo'] ?? '').toString(),
+      hazardClassification: haz['hazardClassification']?.toString() ?? json['hazardClassification']?.toString(),
+      hazardClass: (haz['hazardClass'] ?? json['hazardClass'] ?? '').toString(),
+      flashPoint: (haz['flashPoint'] ?? json['flashPoint'] ?? '').toString(),
+      bseUtilities: bse['utilities']?.toString() ?? json['bseUtilities']?.toString(),
+      bseHvac: bse['hvac']?.toString() ?? json['bseHvac']?.toString(),
+      bseSmokeControl: bse['smokeControl']?.toString() ?? json['bseSmokeControl']?.toString(),
+      bseRubbishChutes: bse['rubbishChutes']?.toString() ?? json['bseRubbishChutes']?.toString(),
+      fireWallProvided: fw['provided']?.toString() ?? json['fireWallProvided']?.toString(),
+      fireWallExtension: fw['extension']?.toString() ?? json['fireWallExtension']?.toString(),
+      fireWallType: fw['wallType']?.toString() ?? json['fireWallType']?.toString(),
       itemDimensions: Map<String, String>.from(json['itemDimensions'] ?? json['item_dimensions'] ?? {}),
+      itemRemarks: Map<String, String>.from(json['itemRemarks'] ?? json['item_remarks'] ?? {}),
       defectsSummary: (json['defectsSummary'] ?? json['defects_summary'] ?? '').toString(),
+      defectsItemIV: (itmDef['itemIV'] ?? json['defectsItemIV'] ?? '').toString(),
+      defectsItemV: (itmDef['itemV'] ?? json['defectsItemV'] ?? '').toString(),
+      defectsItemVI: (itmDef['itemVI'] ?? json['defectsItemVI'] ?? '').toString(),
+      defectsItemVII: (itmDef['itemVII'] ?? json['defectsItemVII'] ?? '').toString(),
+      defectsItemVIII: (itmDef['itemVIII'] ?? json['defectsItemVIII'] ?? (json['defectsSummary'] ?? '')).toString(),
       recommendationAction: json['recommendationAction']?.toString() ?? json['recommendation']?.toString() ?? json['compliance_status']?.toString(),
       inspectorName: (sig['inspectorName'] ?? json['inspectorName'] ?? json['inspector_name'] ?? '').toString(),
       teamLeaderName: (sig['teamLeaderName'] ?? json['teamLeaderName'] ?? json['team_leader_name'] ?? '').toString(),
+      chiefFsedName: (sig['chiefFsedName'] ?? json['chiefFsedName'] ?? '').toString(),
       fireMarshalName: (sig['fireMarshalName'] ?? json['fireMarshalName'] ?? json['fire_marshal_name'] ?? '').toString(),
     );
   }
