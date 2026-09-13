@@ -881,6 +881,147 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                 bgy.lastAssessed,
                 Icons.event_available_outlined,
               ),
+
+              const SizedBox(height: 16),
+              const Divider(color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 12),
+
+              // HOUSE-TO-HOUSE (H2H) SAFETY SECTION
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'HOUSE-TO-HOUSE (H2H) SAFETY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  if (bgy.totalH2HInspected > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEA580C).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${bgy.totalH2HInspected} Inspected',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFEA580C),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (bgy.totalH2HInspected == 0)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF94A3B8)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No household safety checks conducted yet in this barangay.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.analytics_outlined, size: 16, color: Color(0xFF0F172A)),
+                          const SizedBox(width: 6),
+                          Text(
+                            bgy.totalHouseholds > 0
+                                ? 'Coverage: ${bgy.totalH2HInspected} of ${bgy.totalHouseholds} Households'
+                                : '${bgy.totalH2HInspected} Household Checks Recorded',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (bgy.h2hSummaryInterpretation != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Text(
+                              'Overall Status: ',
+                              style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                            ),
+                            Text(
+                              bgy.h2hSummaryInterpretation!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: bgy.h2hHighRiskCount > bgy.h2hSafeCount
+                                    ? const Color(0xFFDC2626)
+                                    : (bgy.h2hModerateCount > bgy.h2hSafeCount
+                                        ? const Color(0xFFD97706)
+                                        : const Color(0xFF16A34A)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildH2HPill(
+                              label: 'Ligtas',
+                              count: bgy.h2hSafeCount,
+                              color: const Color(0xFF16A34A),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildH2HPill(
+                              label: 'May Pangamba',
+                              count: bgy.h2hModerateCount,
+                              color: const Color(0xFFD97706),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildH2HPill(
+                              label: 'Mapanganib',
+                              count: bgy.h2hHighRiskCount,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
@@ -1011,6 +1152,45 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                 color: valueColor ?? const Color(0xFF0F172A),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildH2HPill({
+    required String label,
+    required int count,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

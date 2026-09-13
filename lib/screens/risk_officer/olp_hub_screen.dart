@@ -20,6 +20,7 @@ class OlpHubScreen extends StatefulWidget {
 class _OlpHubScreenState extends State<OlpHubScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _recentOlps = [];
+  String _feedFilter = 'All'; // 'All', 'CFPP', 'H2H'
 
   @override
   void initState() {
@@ -419,32 +420,59 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
       return emptyWidget;
     }
 
+    final filteredOlps = _recentOlps.where((s) {
+      final sType = (s['survey_type'] ?? s['checklist_type'] ?? 'barangay').toString().toLowerCase();
+      final isH2H = sType == 'house_to_house';
+      if (_feedFilter == 'CFPP') return !isH2H;
+      if (_feedFilter == 'H2H') return isH2H;
+      return true;
+    }).toList();
+
     return ListView.builder(
       shrinkWrap: !scrollable,
       physics: scrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
       padding: scrollable ? const EdgeInsets.fromLTRB(16, 8, 16, 24) : EdgeInsets.zero,
-      itemCount: _recentOlps.length + 1,
+      itemCount: filteredOlps.isEmpty ? 2 : filteredOlps.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
+          final cfppCount = _recentOlps.where((s) => (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase() != 'house_to_house').length;
+          final h2hCount = _recentOlps.where((s) => (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase() == 'house_to_house').length;
+
           return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Recent OLP Submissions',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Recent OLP Submissions',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _fetchRecentOlps,
+                      icon: const Icon(Icons.refresh_outlined, size: 16, color: Color(0xFFEA580C)),
+                      label: const Text(
+                        'Refresh',
+                        style: TextStyle(color: Color(0xFFEA580C), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
-                TextButton.icon(
-                  onPressed: _fetchRecentOlps,
-                  icon: const Icon(Icons.refresh_outlined, size: 16, color: Color(0xFFEA580C)),
-                  label: const Text(
-                    'Refresh',
-                    style: TextStyle(color: Color(0xFFEA580C), fontSize: 12, fontWeight: FontWeight.bold),
+                const SizedBox(height: 6),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFeedFilterChip('All', 'All (${_recentOlps.length})'),
+                      _buildFeedFilterChip('CFPP', 'Barangay CFPP ($cfppCount)'),
+                      _buildFeedFilterChip('H2H', 'H2H Household ($h2hCount)'),
+                    ],
                   ),
                 ),
               ],
@@ -452,7 +480,25 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           );
         }
 
-        final survey = _recentOlps[index - 1];
+        if (filteredOlps.isEmpty) {
+          return Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Center(
+              child: Text(
+                'No ${_feedFilter == "CFPP" ? "Barangay CFPP" : "H2H"} submissions found.',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+            ),
+          );
+        }
+
+        final survey = filteredOlps[index - 1];
         final surveyType = survey['survey_type']?.toString() ?? survey['checklist_type']?.toString() ?? 'barangay';
         final isH2H = surveyType == 'house_to_house';
 
@@ -548,6 +594,38 @@ class _OlpHubScreenState extends State<OlpHubScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFeedFilterChip(String value, String label) {
+    final isSelected = _feedFilter == value;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        selectedColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFFF1F5F9),
+        labelStyle: TextStyle(
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          color: isSelected ? Colors.white : const Color(0xFF475569),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        onSelected: (selected) {
+          if (selected) {
+            setState(() {
+              _feedFilter = value;
+            });
+          }
+        },
+      ),
     );
   }
 }

@@ -22,8 +22,10 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
   String _searchQuery = '';
   String _filterRisk = 'All';
 
-  // Map of barangay name -> latest survey record
-  Map<String, Map<String, dynamic>> _latestSurveysByBarangay = {};
+  // Map of barangay name -> latest CFPP survey record
+  Map<String, Map<String, dynamic>> _latestCfppByBarangay = {};
+  // Map of barangay name -> aggregated H2H inspection stats
+  Map<String, Map<String, dynamic>> _h2hStatsByBarangay = {};
 
   @override
   void initState() {
@@ -42,17 +44,58 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
           .select()
           .order('created_at', ascending: false);
 
-      final Map<String, Map<String, dynamic>> latestMap = {};
+      final Map<String, Map<String, dynamic>> latestCfpp = {};
+      final Map<String, List<Map<String, dynamic>>> h2hListMap = {};
 
       for (var item in res) {
-        final bgy = item['barangay']?.toString() ?? item['barangay_name']?.toString() ?? '';
-        if (bgy.isNotEmpty && !latestMap.containsKey(bgy)) {
-          latestMap[bgy] = Map<String, dynamic>.from(item);
+        final bgy = (item['barangay'] ?? item['barangay_name'] ?? '').toString().trim();
+        if (bgy.isEmpty) continue;
+        final sType = (item['survey_type'] ?? item['checklist_type'] ?? '').toString().toLowerCase().trim();
+
+        if (sType == 'house_to_house') {
+          h2hListMap.putIfAbsent(bgy, () => []).add(Map<String, dynamic>.from(item));
+        } else {
+          // CFPP assessment strictly drives barangay status
+          if (!latestCfpp.containsKey(bgy)) {
+            latestCfpp[bgy] = Map<String, dynamic>.from(item);
+          }
         }
       }
 
+      final Map<String, Map<String, dynamic>> h2hStats = {};
+      h2hListMap.forEach((bgy, list) {
+        int safe = 0;
+        int mod = 0;
+        int high = 0;
+        for (var h in list) {
+          final r = (h['risk_level'] ?? h['survey_data']?['riskLevel'] ?? '').toString().toLowerCase();
+          final interp = (h['survey_data']?['safetyInterpretation'] ?? '').toString().toLowerCase();
+          if (r.contains('high') || interp.contains('mapanganib')) {
+            high++;
+          } else if (r.contains('med') || interp.contains('ipangamba') || interp.contains('pangamba')) {
+            mod++;
+          } else {
+            safe++;
+          }
+        }
+        String dominant = 'Ligtas';
+        if (high >= safe && high >= mod) {
+          dominant = 'Mapanganib';
+        } else if (mod >= safe && mod >= high) {
+          dominant = 'May Pangamba';
+        }
+        h2hStats[bgy] = {
+          'total': list.length,
+          'safe': safe,
+          'moderate': mod,
+          'high': high,
+          'dominant': dominant,
+        };
+      });
+
       setState(() {
-        _latestSurveysByBarangay = latestMap;
+        _latestCfppByBarangay = latestCfpp;
+        _h2hStatsByBarangay = h2hStats;
         _isLoading = false;
       });
     } catch (e) {
@@ -65,16 +108,18 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
 
   Color _getRiskColor(String? risk) {
     if (risk == null) return const Color(0xFF94A3B8); // Gray for pending/unassessed
-    switch (risk.toLowerCase()) {
-      case 'high':
-        return const Color(0xFFDC2626);
-      case 'medium':
-        return const Color(0xFFD97706);
-      case 'low':
-        return const Color(0xFF16A34A);
-      default:
-        return const Color(0xFF94A3B8);
-    }
+    final r = risk.toLowerCase();
+    if (r.contains('high')) return const Color(0xFFDC2626);
+    if (r.contains('med')) return const Color(0xFFD97706);
+    if (r.contains('low')) return const Color(0xFF16A34A);
+    return const Color(0xFF94A3B8);
+  }
+
+  String _formatRiskBadgeText(String? riskLevel) {
+    if (riskLevel == null || riskLevel.trim().isEmpty) return 'Pending';
+    final clean = riskLevel.replaceAll(RegExp(r'\s*risk', caseSensitive: false), '').trim();
+    if (clean.isEmpty) return 'Pending';
+    return '$clean Risk';
   }
 
   List<String> get _filteredBarangays {
@@ -82,14 +127,14 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
       final matchesSearch = bgy.toLowerCase().contains(_searchQuery.toLowerCase().trim());
       if (!matchesSearch) return false;
 
-      final survey = _latestSurveysByBarangay[bgy];
+      final survey = _latestCfppByBarangay[bgy];
       final risk = survey?['risk_level']?.toString() ?? survey?['vulnerability_rating']?.toString();
 
       if (_filterRisk == 'All') return true;
       if (_filterRisk == 'Pending') return survey == null;
-      if (_filterRisk == 'High') return risk?.toLowerCase() == 'high';
-      if (_filterRisk == 'Medium') return risk?.toLowerCase() == 'medium';
-      if (_filterRisk == 'Low') return risk?.toLowerCase() == 'low';
+      if (_filterRisk == 'High') return risk != null && risk.toLowerCase().contains('high');
+      if (_filterRisk == 'Medium') return risk != null && risk.toLowerCase().contains('med');
+      if (_filterRisk == 'Low') return risk != null && risk.toLowerCase().contains('low');
 
       return true;
     }).toList();
@@ -204,7 +249,82 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
               _buildDetailItem(Icons.calendar_month_outlined, 'Last Surveyed Date', formattedDate),
               _buildDetailItem(Icons.badge_outlined, 'Assessing Officer', surveyor),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              const Divider(color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 10),
+
+              // HOUSE-TO-HOUSE (H2H) SECTION
+              Builder(
+                builder: (context) {
+                  final h2h = _h2hStatsByBarangay[barangayName];
+                  final totalH2H = (h2h?['total'] as num?)?.toInt() ?? 0;
+                  final safe = (h2h?['safe'] as num?)?.toInt() ?? 0;
+                  final mod = (h2h?['moderate'] as num?)?.toInt() ?? 0;
+                  final high = (h2h?['high'] as num?)?.toInt() ?? 0;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'House-to-House (H2H) Inspections',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          if (totalH2H > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$totalH2H Inspected',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFEA580C),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (totalH2H == 0)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Text(
+                            'No household fire safety checks recorded for this barangay.',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(child: _buildDetailPill('Ligtas', '$safe', const Color(0xFF16A34A))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildDetailPill('May Pangamba', '$mod', const Color(0xFFD97706))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildDetailPill('Mapanganib', '$high', const Color(0xFFDC2626))),
+                          ],
+                        ),
+                    ],
+                  );
+                },
+              ),
+
+              const SizedBox(height: 20),
 
               // Update trigger button
               SizedBox(
@@ -232,7 +352,7 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
                   ),
                   icon: const Icon(Icons.edit_note_outlined),
                   label: const Text(
-                    'Update Risk Profile & Survey',
+                    'Update CFPP Risk Profile',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -261,6 +381,33 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
           Text(
             value,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailPill(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -368,28 +515,42 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
                           padding: const EdgeInsets.all(12),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 3,
-                            childAspectRatio: 0.95,
+                            childAspectRatio: 0.74,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
                           ),
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final bgyName = filtered[index];
-                            final survey = _latestSurveysByBarangay[bgyName];
-                            final riskLevel = survey?['risk_level']?.toString() ?? survey?['vulnerability_rating']?.toString();
+                            final cfppSurvey = _latestCfppByBarangay[bgyName];
+                            final h2h = _h2hStatsByBarangay[bgyName];
+                            final totalH2H = (h2h?['total'] as num?)?.toInt() ?? 0;
+                            final dominant = h2h?['dominant']?.toString() ?? 'Ligtas';
+
+                            final riskLevel = cfppSurvey?['risk_level']?.toString() ?? cfppSurvey?['vulnerability_rating']?.toString();
                             final riskColor = _getRiskColor(riskLevel);
+                            final badgeText = _formatRiskBadgeText(riskLevel);
+
+                            Color h2hColor;
+                            if (dominant == 'Mapanganib') {
+                              h2hColor = const Color(0xFFDC2626);
+                            } else if (dominant == 'May Pangamba') {
+                              h2hColor = const Color(0xFFD97706);
+                            } else {
+                              h2hColor = const Color(0xFF16A34A);
+                            }
 
                             return GestureDetector(
-                              onTap: () => _showBarangayDetailSheet(bgyName, survey),
+                              onTap: () => _showBarangayDetailSheet(bgyName, cfppSurvey),
                               child: Container(
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: const Color(0xFFE2E8F0)),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.03),
+                                      color: Colors.black.withValues(alpha: 0.03),
                                       blurRadius: 6,
                                       offset: const Offset(0, 3),
                                     ),
@@ -399,6 +560,7 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
+                                    // Top: Barangay Name + Chevron
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
@@ -408,7 +570,7 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.bold,
                                               color: Color(0xFF0F172A),
                                             ),
@@ -416,39 +578,86 @@ class _BarangayRiskMapScreenState extends State<BarangayRiskMapScreen> {
                                         ),
                                         const Icon(
                                           Icons.chevron_right_outlined,
-                                          size: 14,
+                                          size: 13,
                                           color: Color(0xFF94A3B8),
                                         ),
                                       ],
                                     ),
+
+                                    // Middle: CFPP Risk Badge & Status
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: riskColor.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(10),
-                                            border: Border.all(color: riskColor.withOpacity(0.3)),
+                                            color: riskColor.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: riskColor.withValues(alpha: 0.3)),
                                           ),
                                           child: Text(
-                                            riskLevel != null ? '$riskLevel Risk' : 'Pending',
+                                            badgeText,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               color: riskColor,
-                                              fontSize: 9,
+                                              fontSize: 8.5,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
+                                        const SizedBox(height: 2),
                                         Text(
-                                          survey != null ? 'Assessed' : 'Needs Survey',
+                                          cfppSurvey != null ? 'CFPP Assessed' : 'Needs CFPP',
                                           style: const TextStyle(
-                                            fontSize: 9,
+                                            fontSize: 8.5,
                                             color: Color(0xFF64748B),
                                           ),
                                         ),
                                       ],
+                                    ),
+
+                                    // Bottom: H2H Sub-Card
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.home_outlined, size: 9, color: Color(0xFF64748B)),
+                                              const SizedBox(width: 2),
+                                              Expanded(
+                                                child: Text(
+                                                  totalH2H > 0 ? '$totalH2H H2H' : '0 H2H',
+                                                  style: const TextStyle(
+                                                    fontSize: 8.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF334155),
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Text(
+                                            totalH2H > 0 ? dominant : 'None',
+                                            style: TextStyle(
+                                              fontSize: 7.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: totalH2H > 0 ? h2hColor : const Color(0xFF94A3B8),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),

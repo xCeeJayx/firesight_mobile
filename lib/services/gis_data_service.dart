@@ -21,6 +21,11 @@ class BarangayRiskPolygon {
   final String waterSupplyStatus;
   final int hydrantsCount;
   final String evacuationCenter;
+  final int totalH2HInspected;
+  final int h2hSafeCount;
+  final int h2hModerateCount;
+  final int h2hHighRiskCount;
+  final String? h2hSummaryInterpretation;
 
   const BarangayRiskPolygon({
     this.mapId,
@@ -40,6 +45,11 @@ class BarangayRiskPolygon {
     this.waterSupplyStatus = 'Deep Well / Open Water',
     this.hydrantsCount = 0,
     this.evacuationCenter = 'Barangay Multi-Purpose Hall',
+    this.totalH2HInspected = 0,
+    this.h2hSafeCount = 0,
+    this.h2hModerateCount = 0,
+    this.h2hHighRiskCount = 0,
+    this.h2hSummaryInterpretation,
   });
 
   Color get riskColor {
@@ -120,7 +130,8 @@ class GisDataService {
   Future<List<BarangayRiskPolygon>> fetchBarangayRiskPolygons() async {
     final client = Supabase.instance.client;
     Map<String, Map<String, dynamic>> dbBarangaysByName = {};
-    Map<String, Map<String, dynamic>> surveysByBarangay = {};
+    Map<String, Map<String, dynamic>> cfppSurveysByBarangay = {};
+    Map<String, List<Map<String, dynamic>>> h2hSurveysByBarangay = {};
 
     // 1. Fetch real barangays master record from public.barangays
     try {
@@ -135,7 +146,7 @@ class GisDataService {
       debugPrint('GisDataService public.barangays fetch note: $e');
     }
 
-    // 2. Fetch live CFPP surveys from public.fire_risk_surveys
+    // 2. Fetch live surveys from public.fire_risk_surveys (Separating CFPP and H2H)
     try {
       final surveysRes = await client
           .from('fire_risk_surveys')
@@ -144,8 +155,18 @@ class GisDataService {
 
       for (var s in surveysRes) {
         final bName = (s['barangay_name'] ?? s['barangay'] ?? '').toString().trim();
-        if (bName.isNotEmpty && !surveysByBarangay.containsKey(bName.toLowerCase())) {
-          surveysByBarangay[bName.toLowerCase()] = Map<String, dynamic>.from(s);
+        if (bName.isEmpty) continue;
+        final bKey = bName.toLowerCase();
+        final sType = (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase().trim();
+
+        if (sType == 'house_to_house') {
+          // Accumulate H2H surveys for household stats
+          h2hSurveysByBarangay.putIfAbsent(bKey, () => []).add(Map<String, dynamic>.from(s));
+        } else {
+          // CFPP assessment strictly drives barangay risk profile
+          if (!cfppSurveysByBarangay.containsKey(bKey)) {
+            cfppSurveysByBarangay[bKey] = Map<String, dynamic>.from(s);
+          }
         }
       }
     } catch (e) {
@@ -159,7 +180,8 @@ class GisDataService {
       final defaultLng = raw['lng'] as double;
 
       final dbB = dbBarangaysByName[name.toLowerCase()];
-      final survey = surveysByBarangay[name.toLowerCase()];
+      final survey = cfppSurveysByBarangay[name.toLowerCase()];
+      final h2hList = h2hSurveysByBarangay[name.toLowerCase()] ?? [];
 
       final legalCode = dbB?['psgc']?.toString() ?? (raw['code'] as String);
       final pop = (dbB?['population_2024'] as num?)?.toInt() ?? (raw['pop'] as int);
@@ -180,7 +202,7 @@ class GisDataService {
       int hydrantsCount = (dbB?['hydrants_count'] as num?)?.toInt() ?? 0;
       String evacuationCenter = dbB?['evacuation_center']?.toString() ?? '$name Multi-Purpose Hall';
 
-      // Dynamically override with live CFPP assessment if submitted
+      // Dynamically override ONLY with live CFPP assessment if submitted
       if (survey != null) {
         riskLevel = (survey['risk_level'] ?? riskLevel).toString().replaceAll(' Risk', '');
         final sc = survey['calculated_score'];
@@ -198,6 +220,35 @@ class GisDataService {
         }
         if (survey['electrical_hazards'] != null && survey['electrical_hazards'].toString().isNotEmpty) {
           predominantHazard = survey['electrical_hazards'].toString();
+        }
+      }
+
+      // Compute H2H summary metrics independently
+      int totalH2H = h2hList.length;
+      int h2hSafe = 0;
+      int h2hMod = 0;
+      int h2hHigh = 0;
+
+      for (var h in h2hList) {
+        final r = (h['risk_level'] ?? h['survey_data']?['riskLevel'] ?? '').toString().toLowerCase();
+        final interp = (h['survey_data']?['safetyInterpretation'] ?? '').toString().toLowerCase();
+        if (r.contains('high') || interp.contains('mapanganib')) {
+          h2hHigh++;
+        } else if (r.contains('med') || interp.contains('ipangamba') || interp.contains('pangamba')) {
+          h2hMod++;
+        } else {
+          h2hSafe++;
+        }
+      }
+
+      String? dominantInterpretation;
+      if (totalH2H > 0) {
+        if (h2hHigh >= h2hSafe && h2hHigh >= h2hMod) {
+          dominantInterpretation = 'Labis na mapanganib';
+        } else if (h2hMod >= h2hSafe && h2hMod >= h2hHigh) {
+          dominantInterpretation = 'Mayroong dapat ipangamba';
+        } else {
+          dominantInterpretation = 'Ligtas ang tahanan';
         }
       }
 
@@ -219,6 +270,11 @@ class GisDataService {
         waterSupplyStatus: waterSupplyStatus,
         hydrantsCount: hydrantsCount,
         evacuationCenter: evacuationCenter,
+        totalH2HInspected: totalH2H,
+        h2hSafeCount: h2hSafe,
+        h2hModerateCount: h2hMod,
+        h2hHighRiskCount: h2hHigh,
+        h2hSummaryInterpretation: dominantInterpretation,
       );
     }).toList();
   }

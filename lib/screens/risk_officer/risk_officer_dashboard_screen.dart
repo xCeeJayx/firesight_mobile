@@ -103,21 +103,20 @@ class _CommunityRiskOfficerDashboardState extends State<CommunityRiskOfficerDash
           .replaceAll(RegExp(r'^barangay\s*', caseSensitive: false), '')
           .trim();
 
-      if (cleanBgy.isNotEmpty) {
-        distinctAssessedBarangays.add(cleanBgy.toLowerCase());
-      }
-
       final surveyType = (item['survey_type'] ?? '').toString().toLowerCase().trim();
       final checklistType = (item['checklist_type'] ?? '').toString().toLowerCase().trim();
       final isH2H = surveyType == 'house_to_house' || checklistType == 'house_to_house';
 
       if (isH2H) {
         h2hCount++;
-      }
-
-      final risk = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString();
-      if (risk.toLowerCase().contains('high')) {
-        highRiskCount++;
+      } else {
+        if (cleanBgy.isNotEmpty) {
+          distinctAssessedBarangays.add(cleanBgy.toLowerCase());
+        }
+        final risk = (item['risk_level'] ?? item['vulnerability_rating'] ?? '').toString();
+        if (risk.toLowerCase().contains('high')) {
+          highRiskCount++;
+        }
       }
     }
 
