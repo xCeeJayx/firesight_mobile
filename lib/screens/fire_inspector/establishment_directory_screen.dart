@@ -64,7 +64,12 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
     return 'Poblacion';
   }
 
-  String _normalizeComplianceStatus(String? recommendation, String? complianceStatus) {
+  String _normalizeComplianceStatus(String? recommendation, String? complianceStatus, [String? overallStatus]) {
+    final ost = (overallStatus ?? '').toLowerCase().trim();
+    if (ost == 'pending' || ost == 'scheduled' || ost == 'assigned' || ost == 'for inspection') {
+      return 'Pending Inspection';
+    }
+
     final rec = (recommendation ?? '').toUpperCase().trim();
     final comp = (complianceStatus ?? '').toUpperCase().trim();
     final combined = '$rec $comp';
@@ -140,6 +145,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
         final status = _normalizeComplianceStatus(
           ins['recommendation']?.toString(),
           ins['compliance_status']?.toString(),
+          ins['overall_status']?.toString(),
         );
 
         final processedInsp = {
@@ -151,6 +157,9 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
           'owner_name': owner.isNotEmpty ? owner : 'N/A',
           'contact_no': contact.isNotEmpty ? contact : 'N/A',
           'compliance_status': status,
+          'overall_status': ins['overall_status'] ?? 'Pending',
+          'checklist_data': ins['checklist_data'],
+          'recommendation': ins['recommendation'],
           'inspection_order_no': ins['inspection_order_no'] ?? genInfo['fsecNo'] ?? chk['ioNumber'] ?? 'IO-2026',
           'last_inspection_date': ins['date_inspected'] ?? ins['created_at'],
         };
@@ -203,6 +212,9 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
             'owner_name': matchedInsp['owner_name'],
             'contact_no': matchedInsp['contact_no'],
             'compliance_status': matchedInsp['compliance_status'],
+            'overall_status': matchedInsp['overall_status'],
+            'checklist_data': matchedInsp['checklist_data'],
+            'recommendation': matchedInsp['recommendation'],
             'inspection_order_no': matchedInsp['inspection_order_no'],
             'last_inspection_date': matchedInsp['last_inspection_date'],
           });
@@ -258,6 +270,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
           final status = _normalizeComplianceStatus(
             insp['recommendation']?.toString(),
             insp['compliance_status']?.toString(),
+            insp['overall_status']?.toString(),
           );
 
           extraBusinesses[uniqueKey] = {
@@ -272,6 +285,9 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
             'owner_name': owner.isNotEmpty ? owner : 'N/A',
             'contact_no': contact.isNotEmpty ? contact : 'N/A',
             'compliance_status': status,
+            'overall_status': insp['overall_status'] ?? 'Pending',
+            'checklist_data': insp['checklist_data'],
+            'recommendation': insp['recommendation'],
             'inspection_order_no': insp['inspection_order_no'] ?? genInfo['fsecNo'] ?? chk['ioNumber'] ?? 'IO-2026',
             'last_inspection_date': insp['date_inspected'] ?? insp['created_at'],
           };
@@ -571,7 +587,7 @@ class _EstablishmentDirectoryScreenState extends State<EstablishmentDirectoryScr
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: colorAccent.withOpacity(0.1),
+                            color: colorAccent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(

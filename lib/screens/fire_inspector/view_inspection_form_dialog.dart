@@ -69,6 +69,13 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
     CommercialChecklistModel model = CommercialChecklistModel.fromJson(combinedJson);
 
+    final String rawOverall = (rawData['overall_status'] ?? '').toString().toLowerCase().trim();
+    final bool hasChecklistData = rawData['checklist_data'] is Map &&
+        (rawData['checklist_data'] as Map).isNotEmpty;
+
+    final bool isCompleted = rawOverall == 'completed' && hasChecklistData;
+    model.overallStatus = isCompleted ? 'Completed' : 'Pending';
+
     if (model.businessName.isEmpty) {
       model.businessName = rawData['business_name']?.toString() ?? rawData['name']?.toString() ?? '';
     }
@@ -92,7 +99,15 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
     if (model.defectsSummary.isEmpty && rawData['defects_summary'] != null) {
       model.defectsSummary = rawData['defects_summary'].toString();
     }
-    if (model.recommendationAction == null || model.recommendationAction!.isEmpty) {
+    if (!isCompleted) {
+      final rawRec = (rawData['recommendation'] ?? rawData['compliance_status'] ?? '').toString().trim();
+      if (rawRec.isNotEmpty && !rawRec.toUpperCase().contains('FSIC')) {
+        if (model.recommendationNotes.isEmpty) {
+          model.recommendationNotes = rawRec;
+        }
+      }
+      model.recommendationAction = 'Pending';
+    } else if (model.recommendationAction == null || model.recommendationAction!.isEmpty) {
       model.recommendationAction = rawData['recommendation'] ?? rawData['compliance_status'] ?? 'FSIC';
     }
 
@@ -203,6 +218,31 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                           _buildBusinessHeroCard(model),
                           const SizedBox(height: 14),
 
+                          if (model.overallStatus.toLowerCase() != 'completed') ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: colorWarning.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: colorWarning.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.info_outline_rounded, size: 18, color: colorWarning),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'This is a scheduled inspection order. The physical checklist, deficiencies, and recommendations will be recorded upon conducting the on-site inspection.',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colorWarning),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
                           // Section 1: Reference & Schedule
                           _buildSectionCard(
                             title: 'Inspection Reference & Schedule',
@@ -210,7 +250,15 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                             children: [
                               _buildKeyValueRow('Inspection Order (IO) #', model.ioNumber, isBold: true),
                               _buildKeyValueRow('Date Issued', model.dateIssued),
-                              _buildKeyValueRow('Date Inspected', model.dateInspected),
+                              _buildKeyValueRow(
+                                'Inspection Status',
+                                model.overallStatus.toLowerCase() != 'completed' ? 'Pending Audit / Scheduled' : 'Audit Completed',
+                                badgeColor: model.overallStatus.toLowerCase() != 'completed' ? colorWarning : colorSuccess,
+                              ),
+                              _buildKeyValueRow(
+                                'Inspection Date',
+                                model.overallStatus.toLowerCase() != 'completed' ? 'Scheduled for ${model.dateInspected}' : model.dateInspected,
+                              ),
                               _buildKeyValueRow('Inspection Nature', _formatNature(model.inspectionNature, model.verificationType, model.natureOthersSpecify)),
                               if (model.fsmrRequired != null)
                                 _buildKeyValueRow('FSMR Required', model.fsmrRequired!),
@@ -377,9 +425,14 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   }
 
   Widget _buildBusinessHeroCard(CommercialChecklistModel model) {
-    final status = model.recommendationAction ?? 'FSIC';
-    final bool isPassed = status.toUpperCase().contains('FSIC') || status.toUpperCase().contains('PASS');
-    final Color badgeColor = isPassed ? colorSuccess : colorWarning;
+    final bool isPending = model.overallStatus.toLowerCase() != 'completed';
+    final status = model.recommendationAction ?? (isPending ? 'Pending' : 'FSIC');
+    final bool isPassed = !isPending && (status.toUpperCase().contains('FSIC') || status.toUpperCase().contains('PASS'));
+    final Color badgeColor = isPending
+        ? colorWarning
+        : (isPassed ? colorSuccess : colorDanger);
+
+    final String badgeText = _formatRecommendationBadge(status);
 
     return Container(
       width: double.infinity,
@@ -407,7 +460,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      model.businessName,
+                      model.businessName.isNotEmpty ? model.businessName : 'Commercial Establishment',
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -421,7 +474,7 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            model.address,
+                            model.address.isNotEmpty ? model.address : 'Lingayen, Pangasinan',
                             style: const TextStyle(fontSize: 12, color: colorTextSecondary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -432,20 +485,25 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  _formatRecommendationBadge(status),
-                  style: TextStyle(
-                    color: badgeColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+              const SizedBox(width: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    badgeText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: badgeColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -459,7 +517,10 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
             runSpacing: 8,
             children: [
               _buildTag(Icons.category_outlined, model.occupancyClassification ?? 'Mercantile'),
-              _buildTag(Icons.calendar_today_outlined, 'Inspected: ${model.dateInspected}'),
+              _buildTag(
+                Icons.calendar_today_outlined,
+                isPending ? 'Scheduled: ${model.dateInspected}' : 'Inspected: ${model.dateInspected}',
+              ),
               _buildTag(Icons.person_outline_rounded, model.ownerRepresentative.isNotEmpty ? model.ownerRepresentative : 'Owner'),
             ],
           ),
@@ -550,6 +611,54 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   }
 
   Widget _buildDeficienciesCard(CommercialChecklistModel model) {
+    final bool isPending = model.overallStatus.toLowerCase() != 'completed';
+
+    if (isPending) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFFDE68A),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(
+                  Icons.pending_actions_rounded,
+                  color: colorWarning,
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Compliance Status: Awaiting Inspection',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: colorWarning,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This inspection order has been scheduled. Compliance status, defect itemization, and statutory evaluations will be recorded once the inspector conducts the physical audit.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: Color(0xFF92400E),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final bool hasDefects = model.defectsSummary.trim().isNotEmpty &&
         !model.defectsSummary.toLowerCase().contains('none') &&
         !model.defectsSummary.toLowerCase().contains('no major');
@@ -600,6 +709,68 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
   }
 
   Widget _buildRecommendationsCard(CommercialChecklistModel model) {
+    final bool isPending = model.overallStatus.toLowerCase() != 'completed';
+
+    if (isPending) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colorSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colorBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.gavel_outlined, size: 18, color: colorAccent),
+                SizedBox(width: 8),
+                Text(
+                  'Inspector Recommendation & Decision',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: colorTextPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorBorder),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.schedule_outlined,
+                    color: Color(0xFF64748B),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      model.recommendationNotes.isNotEmpty
+                          ? 'Order Dispatch Notes: ${model.recommendationNotes}\nFormal decision pending on-site audit.'
+                          : 'Pending Inspection: Formal recommendation (FSIC, NTC, NTCV) will be issued following on-site audit by the assigned fire safety inspector.',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorTextPrimary, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final rec = model.recommendationAction ?? 'FSIC';
     final bool isFsic = rec.toUpperCase().contains('FSIC') || rec.toUpperCase().contains('PASS');
 
@@ -789,7 +960,9 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
                     )
                   : const Icon(Icons.picture_as_pdf_outlined, size: 18, color: Colors.white),
               label: Text(
-                _isExporting ? 'Generating Document...' : 'Export Official 10-Page PDF',
+                _isExporting
+                    ? 'Generating Document...'
+                    : (model.overallStatus.toLowerCase() != 'completed' ? 'Export Order Sheet (PDF)' : 'Export Official 10-Page PDF'),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -855,11 +1028,17 @@ class _ViewInspectionFormDialogState extends State<ViewInspectionFormDialog> {
 
   String _formatRecommendationBadge(String status) {
     final s = status.toUpperCase();
+    if (s.contains('PENDING') || s.contains('SCHEDULE') || s.contains('ASSIGN') || s.contains('DISPATCH')) {
+      return 'PENDING INSPECTION';
+    }
     if (s.contains('FSIC') || s.contains('PASS')) return 'FSIC RECOMMENDED';
     if (s.contains('NTCV')) return 'NOTICE TO CORRECT VIOLATION';
     if (s.contains('NTC')) return 'NOTICE TO COMPLY';
     if (s.contains('CLOSURE')) return 'CLOSURE ORDER';
     if (s.contains('ABATEMENT')) return 'ABATEMENT ORDER';
+    if (status.length > 20) {
+      return 'PENDING INSPECTION';
+    }
     return status;
   }
 }

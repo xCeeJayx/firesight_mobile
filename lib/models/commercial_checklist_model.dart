@@ -102,6 +102,7 @@ class CommercialChecklistModel {
 
   String? recommendationAction; // 'FSIC', 'NoticeToComply', 'NoticeToCorrectViolation', 'ClosureOrder', 'AbatementOrder', 'NOD'
   String recommendationNotes;
+  String overallStatus;
   String inspectorName;
   String teamLeaderName;
   String chiefFsedName;
@@ -196,6 +197,7 @@ class CommercialChecklistModel {
     this.defectsItemVIII = '',
     this.recommendationAction,
     this.recommendationNotes = '',
+    this.overallStatus = 'Pending',
     this.inspectorName = '',
     this.teamLeaderName = '',
     this.chiefFsedName = '',
@@ -432,6 +434,7 @@ class CommercialChecklistModel {
       },
       'recommendationAction': recommendationAction,
       'recommendationNotes': recommendationNotes,
+      'overall_status': overallStatus,
       'signatories': {
         'inspectorName': inspectorName,
         'teamLeaderName': teamLeaderName,
@@ -529,6 +532,7 @@ class CommercialChecklistModel {
       chiefFsedName: (sig['chiefFsedName'] ?? json['chiefFsedName'] ?? '').toString(),
       fireMarshalName: (sig['fireMarshalName'] ?? json['fireMarshalName'] ?? json['fire_marshal_name'] ?? '').toString(),
       ownerSignatureUrl: (sig['ownerSignatureUrl'] ?? json['ownerSignatureUrl'] ?? '').toString(),
+      overallStatus: (json['overall_status'] ?? json['overallStatus'] ?? json['status'] ?? 'Pending').toString(),
     );
   }
 }

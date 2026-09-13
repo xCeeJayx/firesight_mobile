@@ -430,42 +430,50 @@ class _InspectionHubScreenState extends State<InspectionHubScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: colorBorder),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorBorder),
+                              ),
+                              child: Text(
+                                'IO: $ioNo',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextPrimary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            child: Text(
-                              'IO: $ioNo',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextPrimary),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getRiskBgColor(riskLevel),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Priority: $riskLevel',
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getRiskTextColor(riskLevel)),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _getRiskBgColor(riskLevel),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'Priority: $riskLevel',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getRiskTextColor(riskLevel)),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: isOfflinePending ? const Color(0xFFFEF3C7) : _getStatusBgColor(status),
                           borderRadius: BorderRadius.circular(12),
-                          border: isOfflinePending ? Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)) : null,
+                          border: isOfflinePending ? Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)) : null,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,

@@ -140,10 +140,10 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
 
   // Layer Visibility Toggles
   bool _showBarangayPolygons = true;
-  bool _showEstablishmentMarkers = true;
+  bool _showEstablishmentMarkers = false;
   bool _showEmergencyMarkers = true;
-  bool _showHydrantMarkers = true;
-  bool _showEvacuationMarkers = true;
+  bool _showHydrantMarkers = false;
+  bool _showEvacuationMarkers = false;
 
   // Emergency Filter
   String _selectedStatusFilter = 'All';
