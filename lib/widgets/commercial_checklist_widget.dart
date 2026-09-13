@@ -26,24 +26,37 @@ class CommercialChecklistWidget extends StatefulWidget {
 }
 
 class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
+  final _formKey = GlobalKey<FormState>();
   final _model = CommercialChecklistModel();
 
+  int _currentStep = 0; // 0 to 5 (6 Steps)
+  final ScrollController _stepScrollController = ScrollController();
+
   // Design Tokens
-  final Color primaryColor = const Color(0xFFEA580C);
-  final Color successColor = const Color(0xFF16A34A);
-  final Color warningColor = const Color(0xFFD97706);
-  final Color errorColor = const Color(0xFFDC2626);
-  final Color surfaceColor = Colors.white;
-  final Color borderColor = const Color(0xFFE2E8F0);
-  final Color titleColor = const Color(0xFF0F172A);
-  final Color subtitleColor = const Color(0xFF475569);
-  final Color inputBgColor = const Color(0xFFF8FAFC);
+  static const Color colorPrimary = Color(0xFFEA580C);
+  static const Color colorNavy = Color(0xFF0F172A);
+  static const Color colorSuccess = Color(0xFF16A34A);
+  static const Color colorWarning = Color(0xFFD97706);
+  static const Color colorError = Color(0xFFDC2626);
+  static const Color colorSurface = Colors.white;
+  static const Color colorBorder = Color(0xFFE2E8F0);
+  static const Color colorBg = Color(0xFFF8FAFC);
+  static const Color colorTextSecondary = Color(0xFF64748B);
 
   final List<String> _photoUrls = [];
   bool _isUploading = false;
   bool _isSubmitting = false;
 
-  // Controllers - Reference & Gen Info
+  final List<String> _stepTitles = const [
+    'Reference & Profile',
+    'Building Specs & Occupancy',
+    'Means of Egress',
+    'Signs, Lighting & Hazards',
+    'Fire Protection Systems',
+    'Defects & Signatures',
+  ];
+
+  // Controllers - Step 1: Reference & Profile
   final _ioNumberCtrl = TextEditingController();
   final _dateIssuedCtrl = TextEditingController();
   final _dateInspectedCtrl = TextEditingController();
@@ -70,7 +83,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   final _fireInsurancePolicyNoCtrl = TextEditingController();
   final _fireInsuranceDateCtrl = TextEditingController();
 
-  // Sectional Occupancy Controllers
+  // Controllers - Step 2: Specs & Sectional Occupancy
   final _basementCtrl = TextEditingController();
   final _groundFloorCtrl = TextEditingController();
   final _secondFloorCtrl = TextEditingController();
@@ -78,235 +91,179 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
   final _fourthFloorCtrl = TextEditingController();
   final _nthFloorCtrl = TextEditingController();
 
-  // Other Info
   final _occupantLoadCtrl = TextEditingController();
   final _numberOfStoriesCtrl = TextEditingController();
   final _buildingHeightCtrl = TextEditingController();
 
-  // Defects & Signatures
-  final _defectsSummaryCtrl = TextEditingController();
-  final _inspectorNameCtrl = TextEditingController();
-  final _teamLeaderNameCtrl = TextEditingController();
-  final _fireMarshalNameCtrl = TextEditingController();
-
-  // Section VII Hazards
+  // Controllers - Step 4: Hazards
   final _hazardContentsCtrl = TextEditingController();
   final _hazardQuantityCtrl = TextEditingController();
   final _hazardPlacardCtrl = TextEditingController();
-  String? _withinMaq;
   final _hazardIdentificationNoCtrl = TextEditingController();
-  String? _hazardClassification;
   final _hazardClassCtrl = TextEditingController();
   final _flashPointCtrl = TextEditingController();
 
-  // Section VIII.J Building Service Equipment
-  String? _bseUtilities;
-  String? _bseHvac;
-  String? _bseSmokeControl;
-  String? _bseRubbishChutes;
-
-  // Section VIII.K Fire Wall
-  String? _fireWallProvided;
-  String? _fireWallExtension;
-  String? _fireWallType;
-
-  // Itemized Defects (Items IV to VIII)
+  // Controllers - Step 6: Defects & Signatures
+  final _defectsSummaryCtrl = TextEditingController();
   final _defectsItemIVCtrl = TextEditingController();
   final _defectsItemVCtrl = TextEditingController();
   final _defectsItemVICtrl = TextEditingController();
   final _defectsItemVIICtrl = TextEditingController();
   final _defectsItemVIIICtrl = TextEditingController();
+  final _recommendationNotesCtrl = TextEditingController();
+
+  final _inspectorNameCtrl = TextEditingController();
+  final _teamLeaderNameCtrl = TextEditingController();
+  final _chiefFsedNameCtrl = TextEditingController();
+  final _fireMarshalNameCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialIoNumber != null && widget.initialIoNumber!.isNotEmpty) {
-      _ioNumberCtrl.text = widget.initialIoNumber!;
-    }
-    if (widget.initialBusinessName != null && widget.initialBusinessName!.isNotEmpty) {
-      _businessNameCtrl.text = widget.initialBusinessName!;
-    }
-    if (widget.initialAddress != null && widget.initialAddress!.isNotEmpty) {
-      _addressCtrl.text = widget.initialAddress!;
-    }
-    _dateInspectedCtrl.text = DateTime.now().toString().split(' ')[0];
-
-    // Auto-populate inspector name from current user profile
-    final profile = AuthService().userProfile;
-    if (profile != null && profile['full_name'] != null && profile['full_name'].toString().isNotEmpty) {
-      if (_inspectorNameCtrl.text.isEmpty) {
-        _inspectorNameCtrl.text = profile['full_name'].toString();
-      }
-    }
-
-    if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
-      _fetchExistingInspection();
-    }
+    _initDefaultValues();
+    _loadExistingInspection();
   }
 
-  Future<void> _fetchExistingInspection() async {
+  void _initDefaultValues() {
+    final now = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    _dateIssuedCtrl.text = todayStr;
+    _dateInspectedCtrl.text = todayStr;
+
+    if (widget.initialIoNumber != null && widget.initialIoNumber!.isNotEmpty) {
+      _ioNumberCtrl.text = widget.initialIoNumber!;
+    } else {
+      _ioNumberCtrl.text = 'IO-${now.year}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+    }
+
+    if (widget.initialBusinessName != null) {
+      _businessNameCtrl.text = widget.initialBusinessName!;
+      _buildingNameCtrl.text = widget.initialBusinessName!;
+    }
+    if (widget.initialAddress != null) {
+      _addressCtrl.text = widget.initialAddress!;
+    }
+
+    _model.inspectionNature = 'BusinessPermit';
+    _model.constructionType = 'Type I : Concrete & Steel (Fire Resistive)';
+    _model.occupancyClassification = 'Mercantile';
+    _model.interiorFinishWalls = 'Class A : Flame spread index, 0–25; smoke developed index, 0–450';
+    _model.interiorFinishFloor = 'Class I : Critical radiant flux, not less than 0.45 W/cm2';
+    _model.isHighrise = 'No';
+    _model.recommendationAction = 'FSIC';
+
+    // Auto-populate logged-in inspector profile
+    final userProf = AuthService().userProfile;
+    if (userProf != null && userProf['full_name'] != null) {
+      _inspectorNameCtrl.text = userProf['full_name'].toString();
+    }
+    _teamLeaderNameCtrl.text = 'SFO4 Mario D. Ramos, BFP';
+    _chiefFsedNameCtrl.text = 'INSP JUAN DELA CRUZ, BFP';
+    _fireMarshalNameCtrl.text = 'CINSP ROBERTO P. SANTOS, BFP';
+  }
+
+  Future<void> _loadExistingInspection() async {
+    if (widget.assignmentId == null || widget.assignmentId!.isEmpty) return;
+
     try {
-      final response = await Supabase.instance.client
+      final res = await Supabase.instance.client
           .from('inspections')
           .select()
           .eq('id', widget.assignmentId!)
           .maybeSingle();
 
-      if (response != null && mounted) {
+      if (res != null && res['checklist_data'] != null && mounted) {
+        final data = res['checklist_data'] as Map<String, dynamic>;
+        final loaded = CommercialChecklistModel.fromJson(data);
+
         setState(() {
-          if (response['inspection_order_no'] != null && response['inspection_order_no'].toString().isNotEmpty) {
-            _ioNumberCtrl.text = response['inspection_order_no'].toString();
-          }
-          if (response['business_name'] != null && response['business_name'].toString().isNotEmpty) {
-            _businessNameCtrl.text = response['business_name'].toString();
-          }
-          if (response['address'] != null && response['address'].toString().isNotEmpty) {
-            _addressCtrl.text = response['address'].toString();
-          }
-          if (response['date_issued'] != null) {
-            _dateIssuedCtrl.text = response['date_issued'].toString().split('T').first;
-          }
-          if (response['date_inspected'] != null) {
-            _dateInspectedCtrl.text = response['date_inspected'].toString().split('T').first;
-          }
-          if (response['hazard_photo_urls'] != null) {
-            _photoUrls.clear();
-            _photoUrls.addAll(List<String>.from(response['hazard_photo_urls']));
-          }
+          // Copy fields into controllers
+          if (loaded.ioNumber.isNotEmpty) _ioNumberCtrl.text = loaded.ioNumber;
+          if (loaded.dateIssued.isNotEmpty) _dateIssuedCtrl.text = loaded.dateIssued;
+          if (loaded.dateInspected.isNotEmpty) _dateInspectedCtrl.text = loaded.dateInspected;
+          if (loaded.buildingName.isNotEmpty) _buildingNameCtrl.text = loaded.buildingName;
+          if (loaded.address.isNotEmpty) _addressCtrl.text = loaded.address;
+          if (loaded.businessName.isNotEmpty) _businessNameCtrl.text = loaded.businessName;
+          if (loaded.natureOfBusiness.isNotEmpty) _natureOfBusinessCtrl.text = loaded.natureOfBusiness;
+          if (loaded.ownerRepresentative.isNotEmpty) _ownerRepresentativeCtrl.text = loaded.ownerRepresentative;
+          if (loaded.contactNo.isNotEmpty) _contactNoCtrl.text = loaded.contactNo;
 
-          if (response['checklist_data'] != null && response['checklist_data'] is Map<String, dynamic>) {
-            final Map<String, dynamic> data = response['checklist_data'];
-            final loadedModel = CommercialChecklistModel.fromJson(data);
+          if (loaded.fsecNo.isNotEmpty) _fsecNoCtrl.text = loaded.fsecNo;
+          if (loaded.fsecDateIssued.isNotEmpty) _fsecDateCtrl.text = loaded.fsecDateIssued;
+          if (loaded.buildingPermitNo.isNotEmpty) _buildingPermitNoCtrl.text = loaded.buildingPermitNo;
+          if (loaded.buildingPermitDateIssued.isNotEmpty) _buildingPermitDateCtrl.text = loaded.buildingPermitDateIssued;
+          if (loaded.fsicNoLatest.isNotEmpty) _fsicNoLatestCtrl.text = loaded.fsicNoLatest;
+          if (loaded.fsicDateIssued.isNotEmpty) _fsicDateCtrl.text = loaded.fsicDateIssued;
+          if (loaded.fireDrillCertNo.isNotEmpty) _fireDrillCertCtrl.text = loaded.fireDrillCertNo;
+          if (loaded.fireDrillDateIssued.isNotEmpty) _fireDrillDateCtrl.text = loaded.fireDrillDateIssued;
+          if (loaded.businessPermitNo.isNotEmpty) _businessPermitNoCtrl.text = loaded.businessPermitNo;
+          if (loaded.businessPermitDateIssued.isNotEmpty) _businessPermitDateCtrl.text = loaded.businessPermitDateIssued;
+          if (loaded.fireInsurancePolicyNo.isNotEmpty) _fireInsurancePolicyNoCtrl.text = loaded.fireInsurancePolicyNo;
+          if (loaded.fireInsuranceDateIssued.isNotEmpty) _fireInsuranceDateCtrl.text = loaded.fireInsuranceDateIssued;
 
-            _model.ioNumber = loadedModel.ioNumber;
-            _model.dateIssued = loadedModel.dateIssued;
-            _model.dateInspected = loadedModel.dateInspected;
-            _model.inspectionNature = loadedModel.inspectionNature;
-            _model.verificationType = loadedModel.verificationType;
-            _model.natureOthersSpecify = loadedModel.natureOthersSpecify;
-            _model.fsccrRequired = loadedModel.fsccrRequired;
-            _model.fsmrRequired = loadedModel.fsmrRequired;
+          if (loaded.basementUsage.isNotEmpty) _basementCtrl.text = loaded.basementUsage;
+          if (loaded.groundFloorUsage.isNotEmpty) _groundFloorCtrl.text = loaded.groundFloorUsage;
+          if (loaded.secondFloorUsage.isNotEmpty) _secondFloorCtrl.text = loaded.secondFloorUsage;
+          if (loaded.thirdFloorUsage.isNotEmpty) _thirdFloorCtrl.text = loaded.thirdFloorUsage;
+          if (loaded.fourthFloorUsage.isNotEmpty) _fourthFloorCtrl.text = loaded.fourthFloorUsage;
+          if (loaded.nthFloorUsage.isNotEmpty) _nthFloorCtrl.text = loaded.nthFloorUsage;
 
-            _model.buildingName = loadedModel.buildingName;
-            _model.address = loadedModel.address;
-            _model.businessName = loadedModel.businessName;
-            _model.natureOfBusiness = loadedModel.natureOfBusiness;
-            _model.ownerRepresentative = loadedModel.ownerRepresentative;
-            _model.contactNo = loadedModel.contactNo;
+          if (loaded.occupantLoad.isNotEmpty) _occupantLoadCtrl.text = loaded.occupantLoad;
+          if (loaded.numberOfStories.isNotEmpty) _numberOfStoriesCtrl.text = loaded.numberOfStories;
+          if (loaded.buildingHeight.isNotEmpty) _buildingHeightCtrl.text = loaded.buildingHeight;
 
-            _model.fsecNo = loadedModel.fsecNo;
-            _model.fsecDateIssued = loadedModel.fsecDateIssued;
-            _model.buildingPermitNo = loadedModel.buildingPermitNo;
-            _model.buildingPermitDateIssued = loadedModel.buildingPermitDateIssued;
+          if (loaded.hazardContents.isNotEmpty) _hazardContentsCtrl.text = loaded.hazardContents;
+          if (loaded.hazardQuantity.isNotEmpty) _hazardQuantityCtrl.text = loaded.hazardQuantity;
+          if (loaded.hazardPlacard.isNotEmpty) _hazardPlacardCtrl.text = loaded.hazardPlacard;
+          if (loaded.hazardIdentificationNo.isNotEmpty) _hazardIdentificationNoCtrl.text = loaded.hazardIdentificationNo;
+          if (loaded.hazardClass.isNotEmpty) _hazardClassCtrl.text = loaded.hazardClass;
+          if (loaded.flashPoint.isNotEmpty) _flashPointCtrl.text = loaded.flashPoint;
 
-            _model.fsicNoLatest = loadedModel.fsicNoLatest;
-            _model.fsicDateIssued = loadedModel.fsicDateIssued;
-            _model.fireDrillCertNo = loadedModel.fireDrillCertNo;
-            _model.fireDrillDateIssued = loadedModel.fireDrillDateIssued;
-            _model.businessPermitNo = loadedModel.businessPermitNo;
-            _model.businessPermitDateIssued = loadedModel.businessPermitDateIssued;
-            _model.fireInsurancePolicyNo = loadedModel.fireInsurancePolicyNo;
-            _model.fireInsuranceDateIssued = loadedModel.fireInsuranceDateIssued;
+          if (loaded.defectsItemIV.isNotEmpty) _defectsItemIVCtrl.text = loaded.defectsItemIV;
+          if (loaded.defectsItemV.isNotEmpty) _defectsItemVCtrl.text = loaded.defectsItemV;
+          if (loaded.defectsItemVI.isNotEmpty) _defectsItemVICtrl.text = loaded.defectsItemVI;
+          if (loaded.defectsItemVII.isNotEmpty) _defectsItemVIICtrl.text = loaded.defectsItemVII;
+          if (loaded.defectsItemVIII.isNotEmpty) _defectsItemVIIICtrl.text = loaded.defectsItemVIII;
+          if (loaded.defectsSummary.isNotEmpty) _defectsSummaryCtrl.text = loaded.defectsSummary;
 
-            _model.constructionType = loadedModel.constructionType;
-            _model.interiorFinishWalls = loadedModel.interiorFinishWalls;
-            _model.interiorFinishFloor = loadedModel.interiorFinishFloor;
+          if (loaded.inspectorName.isNotEmpty) _inspectorNameCtrl.text = loaded.inspectorName;
+          if (loaded.teamLeaderName.isNotEmpty) _teamLeaderNameCtrl.text = loaded.teamLeaderName;
+          if (loaded.chiefFsedName.isNotEmpty) _chiefFsedNameCtrl.text = loaded.chiefFsedName;
+          if (loaded.fireMarshalName.isNotEmpty) _fireMarshalNameCtrl.text = loaded.fireMarshalName;
 
-            _model.basementUsage = loadedModel.basementUsage;
-            _model.groundFloorUsage = loadedModel.groundFloorUsage;
-            _model.secondFloorUsage = loadedModel.secondFloorUsage;
-            _model.thirdFloorUsage = loadedModel.thirdFloorUsage;
-            _model.fourthFloorUsage = loadedModel.fourthFloorUsage;
-            _model.nthFloorUsage = loadedModel.nthFloorUsage;
+          // Copy map & state references
+          _model.inspectionNature = loaded.inspectionNature;
+          _model.verificationType = loaded.verificationType;
+          _model.fsccrRequired = loaded.fsccrRequired;
+          _model.fsmrRequired = loaded.fsmrRequired;
+          _model.constructionType = loaded.constructionType;
+          _model.interiorFinishWalls = loaded.interiorFinishWalls;
+          _model.interiorFinishFloor = loaded.interiorFinishFloor;
+          _model.occupancyClassification = loaded.occupancyClassification;
+          _model.isHighrise = loaded.isHighrise;
+          _model.withinMaq = loaded.withinMaq;
+          _model.hazardClassification = loaded.hazardClassification;
+          _model.bseUtilities = loaded.bseUtilities;
+          _model.bseHvac = loaded.bseHvac;
+          _model.bseSmokeControl = loaded.bseSmokeControl;
+          _model.bseRubbishChutes = loaded.bseRubbishChutes;
+          _model.fireWallProvided = loaded.fireWallProvided;
+          _model.fireWallExtension = loaded.fireWallExtension;
+          _model.fireWallType = loaded.fireWallType;
+          _model.recommendationAction = loaded.recommendationAction;
 
-            _model.occupancyClassification = loadedModel.occupancyClassification;
-            _model.occupantLoad = loadedModel.occupantLoad;
-            _model.numberOfStories = loadedModel.numberOfStories;
-            _model.buildingHeight = loadedModel.buildingHeight;
-            _model.isHighrise = loadedModel.isHighrise;
+          _model.egressAccessStatus.addAll(loaded.egressAccessStatus);
+          _model.exitComponentsStatus.addAll(loaded.exitComponentsStatus);
+          _model.egressRequirementsStatus.addAll(loaded.egressRequirementsStatus);
+          _model.exitSignageStatus.addAll(loaded.exitSignageStatus);
+          _model.hazardStatus.addAll(loaded.hazardStatus);
+          _model.fireProtectionStatus.addAll(loaded.fireProtectionStatus);
+          _model.itemDimensions.addAll(loaded.itemDimensions);
+          _model.itemRemarks.addAll(loaded.itemRemarks);
 
-            _model.egressAccessStatus = loadedModel.egressAccessStatus;
-            _model.exitComponentsStatus = loadedModel.exitComponentsStatus;
-            _model.egressRequirementsStatus = loadedModel.egressRequirementsStatus;
-            _model.exitSignageStatus = loadedModel.exitSignageStatus;
-            _model.hazardStatus = loadedModel.hazardStatus;
-            _model.fireProtectionStatus = loadedModel.fireProtectionStatus;
-            _model.itemDimensions = loadedModel.itemDimensions;
-
-            _model.defectsSummary = loadedModel.defectsSummary;
-            _model.recommendationAction = loadedModel.recommendationAction;
-            _model.inspectorName = loadedModel.inspectorName;
-            _model.teamLeaderName = loadedModel.teamLeaderName;
-            _model.fireMarshalName = loadedModel.fireMarshalName;
-
-            if (_model.ioNumber.isNotEmpty) _ioNumberCtrl.text = _model.ioNumber;
-            if (_model.dateIssued.isNotEmpty) _dateIssuedCtrl.text = _model.dateIssued;
-            if (_model.dateInspected.isNotEmpty) _dateInspectedCtrl.text = _model.dateInspected;
-            if (_model.natureOthersSpecify != null && _model.natureOthersSpecify!.isNotEmpty) _natureOthersCtrl.text = _model.natureOthersSpecify!;
-
-            if (_model.buildingName.isNotEmpty) _buildingNameCtrl.text = _model.buildingName;
-            if (_model.address.isNotEmpty) _addressCtrl.text = _model.address;
-            if (_model.businessName.isNotEmpty) _businessNameCtrl.text = _model.businessName;
-            if (_model.natureOfBusiness.isNotEmpty) _natureOfBusinessCtrl.text = _model.natureOfBusiness;
-            if (_model.ownerRepresentative.isNotEmpty) _ownerRepresentativeCtrl.text = _model.ownerRepresentative;
-            if (_model.contactNo.isNotEmpty) _contactNoCtrl.text = _model.contactNo;
-
-            if (_model.fsecNo.isNotEmpty) _fsecNoCtrl.text = _model.fsecNo;
-            if (_model.fsecDateIssued.isNotEmpty) _fsecDateCtrl.text = _model.fsecDateIssued;
-            if (_model.buildingPermitNo.isNotEmpty) _buildingPermitNoCtrl.text = _model.buildingPermitNo;
-            if (_model.buildingPermitDateIssued.isNotEmpty) _buildingPermitDateCtrl.text = _model.buildingPermitDateIssued;
-
-            if (_model.fsicNoLatest.isNotEmpty) _fsicNoLatestCtrl.text = _model.fsicNoLatest;
-            if (_model.fsicDateIssued.isNotEmpty) _fsicDateCtrl.text = _model.fsicDateIssued;
-            if (_model.fireDrillCertNo.isNotEmpty) _fireDrillCertCtrl.text = _model.fireDrillCertNo;
-            if (_model.fireDrillDateIssued.isNotEmpty) _fireDrillDateCtrl.text = _model.fireDrillDateIssued;
-            if (_model.businessPermitNo.isNotEmpty) _businessPermitNoCtrl.text = _model.businessPermitNo;
-            if (_model.businessPermitDateIssued.isNotEmpty) _businessPermitDateCtrl.text = _model.businessPermitDateIssued;
-            if (_model.fireInsurancePolicyNo.isNotEmpty) _fireInsurancePolicyNoCtrl.text = _model.fireInsurancePolicyNo;
-            if (_model.fireInsuranceDateIssued.isNotEmpty) _fireInsuranceDateCtrl.text = _model.fireInsuranceDateIssued;
-
-            if (_model.basementUsage.isNotEmpty) _basementCtrl.text = _model.basementUsage;
-            if (_model.groundFloorUsage.isNotEmpty) _groundFloorCtrl.text = _model.groundFloorUsage;
-            if (_model.secondFloorUsage.isNotEmpty) _secondFloorCtrl.text = _model.secondFloorUsage;
-            if (_model.thirdFloorUsage.isNotEmpty) _thirdFloorCtrl.text = _model.thirdFloorUsage;
-            if (_model.fourthFloorUsage.isNotEmpty) _fourthFloorCtrl.text = _model.fourthFloorUsage;
-            if (_model.nthFloorUsage.isNotEmpty) _nthFloorCtrl.text = _model.nthFloorUsage;
-
-            if (_model.occupantLoad.isNotEmpty) _occupantLoadCtrl.text = _model.occupantLoad;
-            if (_model.numberOfStories.isNotEmpty) _numberOfStoriesCtrl.text = _model.numberOfStories;
-            if (_model.buildingHeight.isNotEmpty) _buildingHeightCtrl.text = _model.buildingHeight;
-
-            if (_model.defectsSummary.isNotEmpty) _defectsSummaryCtrl.text = _model.defectsSummary;
-            if (_model.inspectorName.isNotEmpty) _inspectorNameCtrl.text = _model.inspectorName;
-            if (_model.teamLeaderName.isNotEmpty) _teamLeaderNameCtrl.text = _model.teamLeaderName;
-            if (_model.fireMarshalName.isNotEmpty) _fireMarshalNameCtrl.text = _model.fireMarshalName;
-
-            // Hazard details
-            _hazardContentsCtrl.text = _model.hazardContents;
-            _hazardQuantityCtrl.text = _model.hazardQuantity;
-            _hazardPlacardCtrl.text = _model.hazardPlacard;
-            _withinMaq = _model.withinMaq;
-            _hazardIdentificationNoCtrl.text = _model.hazardIdentificationNo;
-            _hazardClassification = _model.hazardClassification;
-            _hazardClassCtrl.text = _model.hazardClass;
-            _flashPointCtrl.text = _model.flashPoint;
-
-            // BSE & FW
-            _bseUtilities = _model.bseUtilities;
-            _bseHvac = _model.bseHvac;
-            _bseSmokeControl = _model.bseSmokeControl;
-            _bseRubbishChutes = _model.bseRubbishChutes;
-
-            _fireWallProvided = _model.fireWallProvided;
-            _fireWallExtension = _model.fireWallExtension;
-            _fireWallType = _model.fireWallType;
-
-            // Itemized defects
-            _defectsItemIVCtrl.text = _model.defectsItemIV;
-            _defectsItemVCtrl.text = _model.defectsItemV;
-            _defectsItemVICtrl.text = _model.defectsItemVI;
-            _defectsItemVIICtrl.text = _model.defectsItemVII;
-            _defectsItemVIIICtrl.text = _model.defectsItemVIII;
+          if (res['hazard_photo_urls'] is List) {
+            _photoUrls.addAll(List<String>.from(res['hazard_photo_urls']));
           }
         });
       }
@@ -317,6 +274,7 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
 
   @override
   void dispose() {
+    _stepScrollController.dispose();
     _ioNumberCtrl.dispose();
     _dateIssuedCtrl.dispose();
     _dateInspectedCtrl.dispose();
@@ -348,82 +306,27 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     _occupantLoadCtrl.dispose();
     _numberOfStoriesCtrl.dispose();
     _buildingHeightCtrl.dispose();
-    _defectsSummaryCtrl.dispose();
-    _inspectorNameCtrl.dispose();
-    _teamLeaderNameCtrl.dispose();
-    _fireMarshalNameCtrl.dispose();
-
     _hazardContentsCtrl.dispose();
     _hazardQuantityCtrl.dispose();
     _hazardPlacardCtrl.dispose();
     _hazardIdentificationNoCtrl.dispose();
     _hazardClassCtrl.dispose();
     _flashPointCtrl.dispose();
-
+    _defectsSummaryCtrl.dispose();
     _defectsItemIVCtrl.dispose();
     _defectsItemVCtrl.dispose();
     _defectsItemVICtrl.dispose();
     _defectsItemVIICtrl.dispose();
     _defectsItemVIIICtrl.dispose();
+    _recommendationNotesCtrl.dispose();
+    _inspectorNameCtrl.dispose();
+    _teamLeaderNameCtrl.dispose();
+    _chiefFsedNameCtrl.dispose();
+    _fireMarshalNameCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-    if (pickedFile == null) return;
-
-    setState(() => _isUploading = true);
-
-    try {
-      final isOnline = await ConnectivityService().hasInternetConnection();
-      if (isOnline) {
-        final file = File(pickedFile.path);
-        final fileName = 'commercial_${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
-
-        await Supabase.instance.client.storage.from('hazard-photos').upload(fileName, file);
-        final publicUrl = Supabase.instance.client.storage.from('hazard-photos').getPublicUrl(fileName);
-
-        setState(() {
-          _photoUrls.add(publicUrl);
-        });
-      } else {
-        // Offline: save local image file path for sync
-        setState(() {
-          _photoUrls.add(pickedFile.path);
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Photo attached locally (Offline). Will upload upon sync.'),
-              backgroundColor: Color(0xFFD97706),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      // Fallback: save local path on upload error
-      setState(() {
-        _photoUrls.add(pickedFile.path);
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Photo saved locally: $e'), backgroundColor: warningColor),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
-  }
-
-  Future<void> _submitReport() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? AuthService().userProfile?['id']?.toString();
-    if (userId == null) return;
-
-    setState(() => _isSubmitting = true);
-
-    // Sync controllers to model
+  void _syncControllersToModel() {
     _model.ioNumber = _ioNumberCtrl.text;
     _model.dateIssued = _dateIssuedCtrl.text;
     _model.dateInspected = _dateInspectedCtrl.text;
@@ -461,45 +364,33 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
     _model.numberOfStories = _numberOfStoriesCtrl.text;
     _model.buildingHeight = _buildingHeightCtrl.text;
 
-    _model.defectsSummary = _defectsSummaryCtrl.text;
-    _model.inspectorName = _inspectorNameCtrl.text;
-    _model.teamLeaderName = _teamLeaderNameCtrl.text;
-    _model.fireMarshalName = _fireMarshalNameCtrl.text;
-
-    // Hazards
     _model.hazardContents = _hazardContentsCtrl.text;
     _model.hazardQuantity = _hazardQuantityCtrl.text;
     _model.hazardPlacard = _hazardPlacardCtrl.text;
-    _model.withinMaq = _withinMaq;
     _model.hazardIdentificationNo = _hazardIdentificationNoCtrl.text;
-    _model.hazardClassification = _hazardClassification;
     _model.hazardClass = _hazardClassCtrl.text;
     _model.flashPoint = _flashPointCtrl.text;
 
-    // Building Service Equipment
-    _model.bseUtilities = _bseUtilities;
-    _model.bseHvac = _bseHvac;
-    _model.bseSmokeControl = _bseSmokeControl;
-    _model.bseRubbishChutes = _bseRubbishChutes;
-
-    // Fire Wall
-    _model.fireWallProvided = _fireWallProvided;
-    _model.fireWallExtension = _fireWallExtension;
-    _model.fireWallType = _fireWallType;
-
-    // Itemized Defects
     _model.defectsItemIV = _defectsItemIVCtrl.text;
     _model.defectsItemV = _defectsItemVCtrl.text;
     _model.defectsItemVI = _defectsItemVICtrl.text;
     _model.defectsItemVII = _defectsItemVIICtrl.text;
     _model.defectsItemVIII = _defectsItemVIIICtrl.text;
+    _model.defectsSummary = _defectsSummaryCtrl.text;
+    _model.recommendationNotes = _recommendationNotesCtrl.text;
 
+    _model.inspectorName = _inspectorNameCtrl.text;
+    _model.teamLeaderName = _teamLeaderNameCtrl.text;
+    _model.chiefFsedName = _chiefFsedNameCtrl.text;
+    _model.fireMarshalName = _fireMarshalNameCtrl.text;
+  }
+
+  Map<String, dynamic> _buildPayload(bool isOnline, String userId) {
+    _syncControllersToModel();
     final payloadData = _model.toJson();
     payloadData['checklist_type'] = 'commercial';
 
-    final isOnline = await ConnectivityService().hasInternetConnection();
-
-    final updatePayload = <String, dynamic>{
+    return <String, dynamic>{
       'inspector_id': userId,
       'checklist_type': 'commercial',
       'inspection_order_no': _model.ioNumber.isNotEmpty ? _model.ioNumber : 'IO-${DateTime.now().millisecondsSinceEpoch}',
@@ -517,1358 +408,1367 @@ class _CommercialChecklistWidgetState extends State<CommercialChecklistWidget> {
       'hazard_photo_urls': _photoUrls,
       'updated_at': DateTime.now().toIso8601String(),
     };
+  }
 
-    if (!isOnline) {
-      // 1. Save locally with overall_status = 'Pending Sync'
-      await OfflineSyncService().queueForSync(
-        targetTable: 'inspections',
-        payload: updatePayload,
-        id: widget.assignmentId,
+  Future<void> _saveDraft() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? AuthService().userProfile?['id']?.toString() ?? 'local_inspector';
+    final payload = _buildPayload(false, userId);
+    payload['overall_status'] = 'Draft';
+
+    await OfflineSyncService().queueForSync(
+      targetTable: 'inspections',
+      payload: payload,
+      id: widget.assignmentId,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.save_outlined, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Text('Draft saved locally! You can resume anytime.'),
+          ],
+        ),
+        backgroundColor: colorNavy,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _submitInspection() async {
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please verify required fields before submitting.'),
+          backgroundColor: colorError,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-
-      await AuthService().logAuditAction(
-        actionType: 'COMMERCIAL_INSPECTION_QUEUED_OFFLINE',
-        targetEntity: _model.businessName.isNotEmpty ? _model.businessName : 'Commercial Establishment',
-        details: 'Queued Commercial Checklist (IO: ${_model.ioNumber}) locally for automatic sync.',
-      );
-
-      // 2. Display success feedback to inspector
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
-            backgroundColor: Color(0xFFD97706),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-      }
-      if (mounted) setState(() => _isSubmitting = false);
       return;
     }
 
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? AuthService().userProfile?['id']?.toString();
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User session not found. Please log in again.'), backgroundColor: colorError),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
     try {
+      final isOnline = await ConnectivityService().hasInternetConnection();
+      final payload = _buildPayload(isOnline, userId);
+
+      if (!isOnline) {
+        await OfflineSyncService().queueForSync(
+          targetTable: 'inspections',
+          payload: payload,
+          id: widget.assignmentId,
+        );
+
+        await AuthService().logAuditAction(
+          actionType: 'COMMERCIAL_INSPECTION_QUEUED_OFFLINE',
+          targetEntity: _model.businessName,
+          details: 'Commercial Checklist (IO: ${_model.ioNumber}) saved offline.',
+        );
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
+            backgroundColor: colorWarning,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context);
+        return;
+      }
+
       if (widget.assignmentId != null && widget.assignmentId!.isNotEmpty) {
         await Supabase.instance.client
             .from('inspections')
-            .update(updatePayload)
+            .update(payload)
             .eq('id', widget.assignmentId!);
       } else {
         await Supabase.instance.client
             .from('inspections')
-            .insert(updatePayload);
+            .insert(payload);
       }
 
       await AuthService().logAuditAction(
         actionType: 'COMMERCIAL_INSPECTION_SUBMITTED',
-        targetEntity: _model.businessName.isNotEmpty ? _model.businessName : 'Commercial Establishment',
-        details: 'Submitted BFP Form 061 Commercial Fire Safety Checklist (IO: ${_model.ioNumber}, Action: ${_model.recommendationAction ?? 'Inspected'}).',
+        targetEntity: _model.businessName,
+        details: 'Submitted Commercial Fire Safety Inspection (IO: ${_model.ioNumber}). Recommendation: ${_model.recommendationAction}',
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('BFP Commercial Fire Safety Checklist Submitted Successfully!'),
-            backgroundColor: Color(0xFF16A34A),
-            behavior: SnackBarBehavior.floating,
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text('Commercial Inspection submitted successfully!')),
+            ],
           ),
-        );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-      }
+          backgroundColor: colorSuccess,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
     } catch (e) {
-      debugPrint('Error submitting online, queueing offline: $e');
-      final offlinePayload = Map<String, dynamic>.from(updatePayload);
-      offlinePayload['overall_status'] = 'Pending Sync';
-
-      await OfflineSyncService().queueForSync(
-        targetTable: 'inspections',
-        payload: offlinePayload,
-        id: widget.assignmentId,
-      );
-
+      debugPrint('Submission error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saved locally (Offline). Will automatically sync when connected.'),
-            backgroundColor: Color(0xFFD97706),
-            behavior: SnackBarBehavior.floating,
-          ),
+          SnackBar(content: Text('Submission failed: $e'), backgroundColor: colorError),
         );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
+  Future<void> _pickAndUploadPhoto() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+    if (pickedFile == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final isOnline = await ConnectivityService().hasInternetConnection();
+      if (isOnline) {
+        final file = File(pickedFile.path);
+        final fileName = 'commercial_${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
+        await Supabase.instance.client.storage.from('hazard-photos').upload(fileName, file);
+        final url = Supabase.instance.client.storage.from('hazard-photos').getPublicUrl(fileName);
+        setState(() => _photoUrls.add(url));
+      } else {
+        setState(() => _photoUrls.add(pickedFile.path));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Photo stored locally for sync.'), backgroundColor: colorWarning),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _photoUrls.add(pickedFile.path));
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  void _nextStep() {
+    if (_currentStep < _stepTitles.length - 1) {
+      setState(() => _currentStep++);
+      _stepScrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    } else {
+      _submitInspection();
+    }
+  }
+
+  void _previousStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+      _stepScrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          _buildStickyHeaderBar(),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _stepScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: _buildCurrentStepView(),
+            ),
+          ),
+          _buildBottomWizardBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStickyHeaderBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorSurface,
+        border: const Border(bottom: BorderSide(color: colorBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'STEP ${_currentStep + 1} OF 6',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorPrimary, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _stepTitles[_currentStep],
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colorNavy),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: colorBg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: colorBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.description_outlined, size: 14, color: colorPrimary),
+                    const SizedBox(width: 4),
+                    Text(
+                      _ioNumberCtrl.text.isNotEmpty ? _ioNumberCtrl.text : 'BFP 061',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colorNavy),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (_currentStep + 1) / 6,
+              backgroundColor: const Color(0xFFF1F5F9),
+              color: colorPrimary,
+              minHeight: 5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomWizardBar() {
+    final isFirstStep = _currentStep == 0;
+    final isLastStep = _currentStep == _stepTitles.length - 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorSurface,
+        border: const Border(top: BorderSide(color: colorBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            if (!isFirstStep) ...[
+              OutlinedButton.icon(
+                onPressed: _previousStep,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  side: const BorderSide(color: colorBorder),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.arrow_back, size: 16, color: colorNavy),
+                label: const Text('Back', style: TextStyle(color: colorNavy, fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+              const SizedBox(width: 8),
+            ],
+            IconButton(
+              onPressed: _saveDraft,
+              tooltip: 'Save Draft',
+              icon: const Icon(Icons.bookmark_outline, color: colorNavy),
+              style: IconButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: colorBorder)),
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isSubmitting ? null : _nextStep,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isLastStep ? colorSuccess : colorPrimary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+                icon: _isSubmitting
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Icon(isLastStep ? Icons.send_outlined : Icons.arrow_forward, size: 16),
+                label: Text(
+                  _isSubmitting
+                      ? 'Submitting...'
+                      : isLastStep
+                          ? 'Submit Inspection'
+                          : 'Next: ${_stepTitles[_currentStep + 1]}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStepView() {
+    switch (_currentStep) {
+      case 0:
+        return _buildStep1ReferenceAndProfile();
+      case 1:
+        return _buildStep2BuildingSpecsAndOccupancy();
+      case 2:
+        return _buildStep3MeansOfEgress();
+      case 3:
+        return _buildStep4SignsLightingHazards();
+      case 4:
+        return _buildStep5FireProtectionSystems();
+      case 5:
+        return _buildStep6DefectsAndSignatures();
+      default:
+        return _buildStep1ReferenceAndProfile();
+    }
+  }
+
+  // ==========================================
+  // STEP 1: REFERENCE, NATURE & PROFILE
+  // ==========================================
+  Widget _buildStep1ReferenceAndProfile() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('I. Reference & Inspection Nature', Icons.assignment_outlined),
-        _buildReferenceSection(),
-        _buildSectionHeader('IV. General Information', Icons.storefront_outlined),
-        _buildGeneralInfoSection(),
-        _buildSectionHeader('Building Specifications & Classification', Icons.architecture_outlined),
-        _buildBuildingSpecificationsSection(),
-        _buildSectionHeader('V. Means of Egress', Icons.exit_to_app_outlined),
-        _buildMeansOfEgressSection(),
-        _buildSectionHeader('VI. Signs, Lighting & Exits Signage', Icons.signpost_outlined),
-        _buildSignsAndSignageSection(),
-        _buildSectionHeader('VII. Hazard Identification', Icons.warning_amber_outlined),
-        _buildHazardSection(),
-        _buildSectionHeader('VIII. Fire Protection Systems', Icons.fire_extinguisher_outlined),
-        _buildFireProtectionSection(),
-        _buildSectionHeader('IX. Defects, Recommendations & Signatures', Icons.fact_check_outlined),
-        _buildDefectsAndRecommendationsSection(),
-        _buildSectionHeader('Photo Documentation', Icons.photo_camera_outlined),
-        _buildPhotoDocumentationSection(),
-        const SizedBox(height: 28),
-        _buildSubmitButton(),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeader(String title, [IconData? icon]) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: primaryColor),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReferenceSection() {
-    final natures = [
-      'Inspection during construction',
-      'FSIC Annual Inspection (PEZA)',
-      'FSIC for Certificate of Occupancy',
-      'FSIC for Business Permit (New/Renewal)',
-      'Verification Inspection for Compliance',
-      'Others',
-    ];
-
-    final verificationTypes = ['NTC', 'NTCV', 'Abatement', 'Closure'];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildTextField('Inspection Order No. (IO)', controller: _ioNumberCtrl, hint: 'e.g. IO-2026-001'),
-          const SizedBox(height: 14),
-          Row(
+        _buildSectionCard(
+          title: 'I. REFERENCE',
+          icon: Icons.assignment_outlined,
+          child: Column(
             children: [
-              Expanded(child: _buildTextField('Date Issued', controller: _dateIssuedCtrl, hint: 'YYYY-MM-DD')),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Inspected', controller: _dateInspectedCtrl, hint: 'YYYY-MM-DD')),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Text('Nature of Inspection Conducted:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          ...natures.map((n) {
-            final isSel = _model.inspectionNature == n;
-            return InkWell(
-              onTap: () => setState(() => _model.inspectionNature = n),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                      size: 18,
-                      color: isSel ? primaryColor : subtitleColor,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        n,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                          color: titleColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-
-          if (_model.inspectionNature == 'Verification Inspection for Compliance') ...[
-            const SizedBox(height: 12),
-            Text('Verification Sub-type:', style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: verificationTypes.map((vt) {
-                final isSel = _model.verificationType == vt;
-                return ChoiceChip(
-                  label: Text(vt, style: const TextStyle(fontSize: 12)),
-                  selected: isSel,
-                  selectedColor: primaryColor,
-                  backgroundColor: inputBgColor,
-                  side: BorderSide(color: isSel ? primaryColor : borderColor),
-                  labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
-                  onSelected: (val) => setState(() => _model.verificationType = val ? vt : null),
-                );
-              }).toList(),
-            ),
-          ],
-
-          if (_model.inspectionNature == 'Others') ...[
-            const SizedBox(height: 12),
-            _buildTextField('Specify Other Nature', controller: _natureOthersCtrl),
-          ],
-
-          const SizedBox(height: 20),
-          Text('III. Requirements:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          _buildYesNoToggleRow('FSCCR Report (Occupancy)', _model.fsccrRequired, (v) => setState(() => _model.fsccrRequired = v)),
-          const SizedBox(height: 12),
-          _buildYesNoToggleRow('FSMR Report (New / Renewal / Annual)', _model.fsmrRequired, (v) => setState(() => _model.fsmrRequired = v)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGeneralInfoSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        children: [
-          _buildTextField('Name of Building', controller: _buildingNameCtrl),
-          const SizedBox(height: 14),
-          _buildTextField('Address', controller: _addressCtrl),
-          const SizedBox(height: 14),
-          _buildTextField('Business Name', controller: _businessNameCtrl),
-          const SizedBox(height: 14),
-          _buildTextField('Nature of Business', controller: _natureOfBusinessCtrl),
-          const SizedBox(height: 14),
-          _buildTextField('Name of Owner / Representative', controller: _ownerRepresentativeCtrl),
-          const SizedBox(height: 14),
-          _buildTextField('Contact No.', controller: _contactNoCtrl, isNum: true),
-          const SizedBox(height: 20),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('FSIC for Occupancy Permits:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('FSEC No.', controller: _fsecNoCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _fsecDateCtrl)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Building Permit No.', controller: _buildingPermitNoCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _buildingPermitDateCtrl)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('FSIC for Business Permit (New/Renewal):', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('FSIC No. (Latest)', controller: _fsicNoLatestCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _fsicDateCtrl)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Cert. of Fire Drill', controller: _fireDrillCertCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _fireDrillDateCtrl)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Business Permit No.', controller: _businessPermitNoCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _businessPermitDateCtrl)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Fire Insurance Policy', controller: _fireInsurancePolicyNoCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Date Issued', controller: _fireInsuranceDateCtrl)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBuildingSpecificationsSection() {
-    final constructionTypes = [
-      'Type I: Concrete & Steel (Fire Resistive)',
-      'Type II: Concrete & Exposed Steel (Noncombustible)',
-      'Type III: Concrete & Wood (Ordinary)',
-      'Type IV: Heavy Timber (Large mass wood)',
-      'Type V: Wood frame (Lightweight wood)',
-    ];
-
-    final wallFinishes = [
-      'Class A: Flame spread 0-25',
-      'Class B: Flame spread 26-75',
-      'Class C: Flame spread 76-200',
-    ];
-
-    final floorFinishes = [
-      'Class I: Critical radiant flux >= 0.45 W/cm2',
-      'Class II: Critical radiant flux 0.22 - 0.45 W/cm2',
-    ];
-
-    final occupancies = [
-      'Assembly', 'Educational', 'Day Care', 'Health Care',
-      'Detention and Correctional', 'Residential', 'Residential Board and Care',
-      'Mercantile', 'Business', 'Industrial', 'Storage', 'Special Structure'
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Construction Type:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          ...constructionTypes.map((ct) {
-            final isSel = _model.constructionType == ct;
-            return InkWell(
-              onTap: () => setState(() => _model.constructionType = ct),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                      size: 18,
-                      color: isSel ? primaryColor : subtitleColor,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        ct,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                          color: titleColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 16),
-          Text('Walls / Ceiling Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: wallFinishes.map((wf) {
-              final isSel = _model.interiorFinishWalls == wf;
-              return ChoiceChip(
-                label: Text(wf.split(':')[0], style: const TextStyle(fontSize: 12)),
-                selected: isSel,
-                selectedColor: primaryColor,
-                backgroundColor: inputBgColor,
-                side: BorderSide(color: isSel ? primaryColor : borderColor),
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
-                onSelected: (val) => setState(() => _model.interiorFinishWalls = val ? wf : null),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-          Text('Floor Interior Finish:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: floorFinishes.map((ff) {
-              final isSel = _model.interiorFinishFloor == ff;
-              return ChoiceChip(
-                label: Text(ff.split(':')[0], style: const TextStyle(fontSize: 12)),
-                selected: isSel,
-                selectedColor: primaryColor,
-                backgroundColor: inputBgColor,
-                side: BorderSide(color: isSel ? primaryColor : borderColor),
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
-                onSelected: (val) => setState(() => _model.interiorFinishFloor = val ? ff : null),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 20),
-          Text('General Occupancy Classification:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: occupancies.map((occ) {
-              final isSel = _model.occupancyClassification == occ;
-              return ChoiceChip(
-                label: Text(occ, style: const TextStyle(fontSize: 12)),
-                selected: isSel,
-                selectedColor: primaryColor,
-                backgroundColor: inputBgColor,
-                side: BorderSide(color: isSel ? primaryColor : borderColor),
-                labelStyle: TextStyle(color: isSel ? Colors.white : titleColor, fontWeight: FontWeight.bold),
-                onSelected: (val) => setState(() => _model.occupancyClassification = val ? occ : null),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 20),
-          Text('Sectional Occupancy Usage:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Basement', controller: _basementCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Ground Floor', controller: _groundFloorCtrl)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Second Floor', controller: _secondFloorCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Third Floor', controller: _thirdFloorCtrl)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Fourth Floor', controller: _fourthFloorCtrl)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Nth Floor', controller: _nthFloorCtrl)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text('Other Building Information:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Max Occupant Load (P/Floor)', controller: _occupantLoadCtrl, isNum: true)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildTextField('Number of Stories', controller: _numberOfStoriesCtrl, isNum: true)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildTextField('Building Height (m)', controller: _buildingHeightCtrl, isNum: true)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Highrise Building?', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    _buildYesNoToggleRow('', _model.isHighrise, (v) => setState(() => _model.isHighrise = v)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMeansOfEgressSection() {
-    final exitAccessComponents = [
-      'Doors', 'Corridors / Hallways', 'Passageways', 'Lobby / Anteroom',
-      'Ramps', 'Common path of travel', 'Dead end', 'Travel distance'
-    ];
-
-    final exitAccessRequirements = [
-      'Door leaf unobstructing corridor / landing width',
-      'Door leaf projection <= 180 mm into width',
-      'At least 2 means of egress for room load >= 50 or hazard',
-      'Guest door >= 20 minutes fire resistant',
-      'Doors opening onto corridors are self-closing & self-latching',
-      'No openings in corridor partitions other than doors',
-      'Free from any obstruction',
-      'No flammable material stored',
-    ];
-
-    final exitComponents = [
-      'Exits Doors', 'Normal Stairs', 'Curve stairs', 'Winding Stairs',
-      'Horizontal Exits', 'Outside Stairs', 'Exit Passageways', 'Fire Escape Stairs',
-      'Fire Escape Ladders', 'Slide Escape'
-    ];
-
-    final exitRequirements = [
-      'At least two (2) means of egress for each floor',
-      'Doors assembly: 60 mins fire resistant (<= 3 communicating levels)',
-      'Doors assembly: 90 mins fire resistant (>= 4 communicating levels)',
-      'Exit doors with Re-entry mechanism at every 4 storey',
-      'Stair tread: Minimum depth = 280 mm',
-      'Stair riser: Height = 100 mm / 180 mm',
-      'Minimum stair headroom: 2000 mm',
-      'Stair provided with Guard and Handrails',
-      'Maximum handrails projections: 114 mm',
-      'Stair landing >= required width of exit door',
-      'Exits doors open and close properly',
-      'Doors swing in direction of egress',
-      'Exit doors with panic hardware, vision panel & self-closing',
-      'No enclosed usable space under stairs',
-      'Interior finish: Class B',
-    ];
-
-    final dischargeRequirements = [
-      'Remoteness of exit discharge >= 1/2 of length of overall dimension',
-      'Remoteness >= 1/3 of length if protected throughout by ASASS',
-      'Exterior grounds clear of objects impeding evacuation',
-      'Terminate directly at a public way or exterior exit discharge',
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          _buildAccordion(
-            title: 'A. Exit Access Components & Dimensions',
-            icon: Icons.door_front_door_outlined,
-            children: exitAccessComponents.map((comp) => _buildItemWithDimensionToggle(comp, _model.egressAccessStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'Exit Access Requirements',
-            icon: Icons.fact_check_outlined,
-            children: exitAccessRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'B. Exits Components & Clear Width',
-            icon: Icons.stairs_outlined,
-            children: exitComponents.map((comp) => _buildItemWithDimensionToggle(comp, _model.exitComponentsStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'Exits Requirements (Stairs & Doors)',
-            icon: Icons.rule_outlined,
-            children: exitRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'C. Exits Discharge Requirements',
-            icon: Icons.directions_run_outlined,
-            children: dischargeRequirements.map((req) => _buildPassFailToggle(req, req, _model.egressRequirementsStatus)).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSignsAndSignageSection() {
-    final egressMarkings = [
-      'Minimum letter height, 150 mm',
-      'EXIT signs posted along Exit access, Exits and Exit discharge',
-      'EXIT signs properly illuminated',
-    ];
-
-    final planChecklist = [
-      'Posted on strategic & conspicuous location inside building',
-      'Photo-luminescent background for power failure visibility',
-      'Contains basic markings (You are Here, Exits, Routes, Pull stations, Extinguishers, Emergency Light, First Aid, Call stations, Assembly areas)',
-      'Floor area < 50 m² (Size 330.2 x 215.9 mm)',
-      'Floor area 50-150 m² (Size 609.6 x 457.2 mm)',
-      'Floor area >= 151 m² (Size 609.6 x 914.4 mm)',
-    ];
-
-    final illuminationChecklist = [
-      'Floors walking surfaces >= 1 ft-candle (10.8 lux)',
-      'Assembly occupancies walking surfaces >= 0.2 ft-candle (2.2 lux)',
-      'Stairs walking surfaces >= 10 ft-candle (108 lux)',
-      'Emergency lighting average 1 ft-candle (min 0.1 ft-candle for 1.5 hr)',
-      'Emergency lighting auto-activates on normal power failure',
-      'Periodic Testing of Emergency Lighting Equipment (Written record)',
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          _buildAccordion(
-            title: 'A. Marking of Means of Egress (EXIT)',
-            icon: Icons.signpost_outlined,
-            children: egressMarkings.map((m) => _buildPassFailToggle(m, m, _model.exitSignageStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'B. Emergency Evacuation Plan',
-            icon: Icons.map_outlined,
-            children: planChecklist.map((item) => _buildPassFailToggle(item, item, _model.exitSignageStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'C. Illumination of Means of Egress',
-            icon: Icons.lightbulb_outlined,
-            children: illuminationChecklist.map((item) => _buildPassFailToggle(item, item, _model.exitSignageStatus)).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHazardSection() {
-    final flammableLiquids = [
-      'Stored in sealed metal containers',
-      'Properly dispensed as per SOP',
-      'Provided with "NO SMOKING" sign',
-    ];
-
-    final miscHazards = [
-      'All no smoking areas have adequate signs',
-      'Gasoline / Diesel stored in proper place & metal safety can',
-    ];
-
-    final housekeeping = [
-      'Brooms, mops, rags stored in metal cabinets or approved cans',
-      'Paints, solvents stored in metal cabinet; oily rags in metal containers',
-      'Dry leaves, shrubbery trimmings kept away from buildings',
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          _buildAccordion(
-            title: 'Hazard Details & Classification (Section VII)',
-            icon: Icons.warning_amber_rounded,
-            children: [
-              _buildTextField('Hazard Contents', controller: _hazardContentsCtrl, hint: 'e.g. Paints, Solvents, LPG, Alcohol'),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildTextField('Quantity (Vol. / Weight)', controller: _hazardQuantityCtrl, hint: 'e.g. 50 Liters / 100 kg')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildTextField('Hazard Placard', controller: _hazardPlacardCtrl, hint: 'NFPA 704 / Placard info')),
-                ],
+              TextFormField(
+                controller: _ioNumberCtrl,
+                decoration: const InputDecoration(labelText: 'Inspection Order No. (IO) *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.isEmpty ? 'IO number required' : null,
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Within MAQ (Max Allowable Qty):', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: ['Yes', 'No'].map((opt) {
-                            final isSel = _withinMaq == opt;
-                            return Expanded(
-                              child: InkWell(
-                                onTap: () => setState(() => _withinMaq = opt),
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 6),
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSel ? primaryColor.withValues(alpha: 0.1) : inputBgColor,
-                                    border: Border.all(color: isSel ? primaryColor : borderColor),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(opt, style: TextStyle(color: isSel ? primaryColor : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
+                    child: TextFormField(
+                      controller: _dateIssuedCtrl,
+                      decoration: const InputDecoration(labelText: 'Date Issued', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today, size: 16)),
+                      readOnly: true,
+                      onTap: () async {
+                        final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
+                        if (d != null) _dateIssuedCtrl.text = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+                      },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildTextField('Hazard ID #', controller: _hazardIdentificationNoCtrl, hint: 'e.g. UN 1203')),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text('Hazard Classification:', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Row(
-                children: ['Low', 'Ordinary', 'High'].map((cls) {
-                  final isSel = _hazardClassification == cls;
-                  return Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => _hazardClassification = cls),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSel ? primaryColor.withValues(alpha: 0.1) : inputBgColor,
-                          border: Border.all(color: isSel ? primaryColor : borderColor),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(cls, style: TextStyle(color: isSel ? primaryColor : subtitleColor, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _buildTextField('Class', controller: _hazardClassCtrl, hint: 'e.g. Class I-A / II / III')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildTextField('Flash Point', controller: _flashPointCtrl, hint: 'e.g. < 23°C / 37.8°C')),
-                ],
-              ),
-            ],
-          ),
-          _buildAccordion(
-            title: 'A. Other Flammable Liquids (Alcohol, Ether, etc.)',
-            icon: Icons.science_outlined,
-            children: flammableLiquids.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'B. Miscellaneous Hazards (Equipment/Storage)',
-            icon: Icons.inventory_2_outlined,
-            children: miscHazards.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'C. Housekeeping & Waste Disposal',
-            icon: Icons.cleaning_services_outlined,
-            children: housekeeping.map((item) => _buildPassFailToggle(item, item, _model.hazardStatus)).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFireProtectionSection() {
-    final sprinklerItems = [
-      'Sprinkler Pumps - Check automatic start and pressure',
-      'Sprinkler Valves - Valves locked open, no leaks/corrosion',
-      'Sprinkler Water Flow Alarm - Open test valve & check manual alarm bell',
-    ];
-
-    final hoseCabinetItems = [
-      'Cabinet Door Operative - Unobstructed and opens properly',
-      'Hose Condition - Not rotted, wet, or moldy',
-      'Nozzle - In place and operates correctly',
-      'Hose Hung Properly - Easily un-rolled if needed',
-      'Valves & Handles - Handles in place, open position',
-    ];
-
-    final firePumpItems = [
-      'Pump System - Inspect accuracy of gauges & sensors',
-      'Pipings - Check pipings for leaks',
-      'Motor - Check unusual noise or vibrations',
-      'Electrical System - Check corrosion, wire insulation, leaks',
-    ];
-
-    final alarmAndExtinguishers = [
-      'Fire Detection System - Random test call points & smoke detectors',
-      'Fire Alarm Facilities - Location signs legible & panels unobstructed',
-      'Lifts (Elevator) - Home to ground floor, fans & fireman lift operating',
-      'Extinguishers Size - Minimal sizes meet RA 9514 table 7 & 8',
-      'Extinguishers Quantity - Minimum count meets RA 9514 requirements',
-      'Extinguishers Location & Tags - Proper location, intact seals/tags',
-      'Extinguishers Pressure - Gauge reads in the "green" area',
-      'Emergency Lighting Battery - Battery lights turn on on power failure',
-      'Kitchen Hoods & Vents - Hoods, vents, fans & ducts free from grease',
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          _buildAccordion(
-            title: 'A. Automatic Fire Suppression System (Sprinkler)',
-            icon: Icons.water_drop_outlined,
-            children: sprinklerItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'B. Wet Standpipe / Fire Hose Cabinet',
-            icon: Icons.local_fire_department_outlined,
-            children: hoseCabinetItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'C. Fire Pump Infrastructure',
-            icon: Icons.speed_outlined,
-            children: firePumpItems.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'D-I. Fire Alarms, Extinguishers & Kitchen',
-            icon: Icons.shield_outlined,
-            children: alarmAndExtinguishers.map((item) => _buildPassFailToggle(item, item, _model.fireProtectionStatus)).toList(),
-          ),
-          _buildAccordion(
-            title: 'J. Building Service Equipment (AKHFSS, HVAC, Smoke, Chutes)',
-            icon: Icons.construction_outlined,
-            children: [
-              _buildChoiceToggleRow('1. Utilities (Cooking equipment protected by AKHFSS)', _bseUtilities, (val) => setState(() => _bseUtilities = val)),
-              _buildChoiceToggleRow('2. Heating, Ventilating and Air-conditioning (PMEC)', _bseHvac, (val) => setState(() => _bseHvac = val)),
-              _buildChoiceToggleRow('3. Smoke Control Systems / Smoke Management', _bseSmokeControl, (val) => setState(() => _bseSmokeControl = val)),
-              _buildChoiceToggleRow('4. Rubbish / Laundry Chutes & Incinerators', _bseRubbishChutes, (val) => setState(() => _bseRubbishChutes = val)),
-            ],
-          ),
-          _buildAccordion(
-            title: 'K. Fire Wall (FW) Specifications',
-            icon: Icons.fence_outlined,
-            children: [
-              _buildYesNoToggleRow('Provided with Fire Wall (minimum 2 hours fire resistance)', _fireWallProvided, (val) => setState(() => _fireWallProvided = val)),
-              const SizedBox(height: 10),
-              _buildYesNoToggleRow('FW extension above roof surface shall not be less than 760mm', _fireWallExtension, (val) => setState(() => _fireWallExtension = val)),
-              const SizedBox(height: 12),
-              Text('Wall Type:', style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Column(
-                children: [
-                  '125mm Solid Concrete',
-                  '150mm Solid Masonry',
-                  '200mm Hallow Unit Masonry',
-                ].map((wt) {
-                  final isSel = _fireWallType == wt;
-                  return InkWell(
-                    onTap: () => setState(() => _fireWallType = wt),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 16, color: isSel ? primaryColor : subtitleColor),
-                          const SizedBox(width: 8),
-                          Text(wt, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDefectsAndRecommendationsSection() {
-    final recommendations = [
-      {'label': 'Issuance of FSIC', 'value': 'FSIC'},
-      {'label': 'Notice to Comply', 'value': 'NoticeToComply'},
-      {'label': 'Notice to Correct Violation', 'value': 'NoticeToCorrectViolation'},
-      {'label': 'Closure Order', 'value': 'ClosureOrder'},
-      {'label': 'Abatement Order with Administrative Fine', 'value': 'AbatementOrder'},
-      {'label': 'Notice of Disapproval (NOD)', 'value': 'NOD'},
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildAccordion(
-            title: 'Itemized Defects & Deficiencies (Items IV to VIII)',
-            icon: Icons.list_alt_outlined,
-            children: [
-              _buildTextField('ITEM IV: General Information Defects', controller: _defectsItemIVCtrl, maxLines: 2, hint: 'Deficiencies in general info or permits'),
-              const SizedBox(height: 10),
-              _buildTextField('ITEM V: Means of Egress Defects', controller: _defectsItemVCtrl, maxLines: 2, hint: 'Deficiencies in doors, corridors, stairs, or ramps'),
-              const SizedBox(height: 10),
-              _buildTextField('ITEM VI: Signs & Illumination Defects', controller: _defectsItemVICtrl, maxLines: 2, hint: 'Deficiencies in exit signs, lighting, or evacuation plan'),
-              const SizedBox(height: 10),
-              _buildTextField('ITEM VII: Hazards & Flammable Materials Defects', controller: _defectsItemVIICtrl, maxLines: 2, hint: 'Deficiencies in hazardous materials, storage, or housekeeping'),
-              const SizedBox(height: 10),
-              _buildTextField('ITEM VIII: Fire Protection Systems Defects', controller: _defectsItemVIIICtrl, maxLines: 2, hint: 'Deficiencies in sprinklers, standpipes, alarms, extinguishers, or BSE'),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildTextField('OVERALL DEFECTS SUMMARY', controller: _defectsSummaryCtrl, maxLines: 3, hint: 'Summary of critical defects found'),
-          const SizedBox(height: 18),
-          Text('RECOMMENDATIONS:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          ...recommendations.map((rec) {
-            final isSel = _model.recommendationAction == rec['value'];
-            return InkWell(
-              onTap: () => setState(() => _model.recommendationAction = rec['value']),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                      size: 18,
-                      color: isSel ? primaryColor : subtitleColor,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        rec['label']!,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                          color: titleColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 20),
-          Text('Signatures & Approvals:', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 12),
-          _buildTextField('Fire Safety Inspector/s', controller: _inspectorNameCtrl),
-          const SizedBox(height: 12),
-          _buildTextField('Team Leader', controller: _teamLeaderNameCtrl),
-          const SizedBox(height: 12),
-          _buildTextField('City / Municipal Fire Marshal', controller: _fireMarshalNameCtrl, hint: 'Leave blank if pending Web Admin approval'),
-          const SizedBox(height: 4),
-          Text('(Note: The Fire Marshal name will be approved and input on FireSight Web Admin)', style: TextStyle(color: subtitleColor, fontSize: 11, fontStyle: FontStyle.italic)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhotoDocumentationSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: _isUploading ? null : _pickAndUploadImage,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 22),
-              decoration: BoxDecoration(
-                color: inputBgColor,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor),
-              ),
-              child: Column(
-                children: [
-                  if (_isUploading)
-                    CircularProgressIndicator(color: primaryColor)
-                  else ...[
-                    Icon(Icons.camera_alt_outlined, size: 34, color: primaryColor),
-                    const SizedBox(height: 8),
-                    Text('Tap to capture commercial inspection photos', style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Text('Attach visual evidence for BFP records', style: TextStyle(color: subtitleColor, fontSize: 11)),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          if (_photoUrls.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: _photoUrls.length,
-              itemBuilder: (context, index) {
-                final urlOrPath = _photoUrls[index];
-                ImageProvider imgProvider;
-                if (urlOrPath.startsWith('http')) {
-                  imgProvider = NetworkImage(urlOrPath);
-                } else {
-                  imgProvider = FileImage(File(urlOrPath));
-                }
-
-                return Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: borderColor),
-                    image: DecorationImage(
-                      image: imgProvider,
-                      fit: BoxFit.cover,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _dateInspectedCtrl,
+                      decoration: const InputDecoration(labelText: 'Date Inspected', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today, size: 16)),
+                      readOnly: true,
+                      onTap: () async {
+                        final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
+                        if (d != null) _dateInspectedCtrl.text = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+                      },
                     ),
                   ),
-                );
-              },
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubmitButton() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: ElevatedButton.icon(
-          onPressed: _isSubmitting ? null : _submitReport,
-          icon: _isSubmitting
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Icon(Icons.send_outlined, size: 20, color: Colors.white),
-          label: Text(
-            _isSubmitting ? 'SUBMITTING CHECKLIST...' : 'SUBMIT COMMERCIAL BFP CHECKLIST',
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryColor,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ],
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAccordion({required String title, required List<Widget> children, IconData? icon}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: _cardDecoration(),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          leading: icon != null ? Icon(icon, size: 20, color: primaryColor) : null,
-          title: Text(title, style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildItemWithDimensionToggle(String label, Map<String, String> statusMap) {
-    final currentStatus = statusMap[label];
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'II. NATURE OF INSPECTION CONDUCTED',
+          icon: Icons.checklist_rtl_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 110,
-                child: TextFormField(
-                  onChanged: (val) => _model.itemDimensions[label] = val,
-                  keyboardType: TextInputType.number,
-                  style: TextStyle(fontSize: 12, color: titleColor, fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    hintText: 'Dim (m)',
-                    hintStyle: TextStyle(color: subtitleColor.withValues(alpha: 0.5), fontSize: 11),
-                    filled: true,
-                    fillColor: inputBgColor,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: primaryColor, width: 1.5)),
-                  ),
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildChoiceChip('Construction', 'Inspection during construction'),
+                  _buildChoiceChip('PEZA', 'FSIC for PEZA Annual'),
+                  _buildChoiceChip('Occupancy', 'FSIC for Certificate of Occupancy'),
+                  _buildChoiceChip('BusinessPermit', 'FSIC for Business Permit'),
+                  _buildChoiceChip('Verification', 'Verification for Compliance'),
+                  _buildChoiceChip('Others', 'Others (Specify)'),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Row(
-                  children: ['Passed', 'Failed', 'N/A'].map((opt) {
-                    final isSel = currentStatus == opt;
-                    Color bg = const Color(0xFFF1F5F9);
-                    Color borderC = borderColor;
-                    Color textC = subtitleColor;
-                    IconData iconData = Icons.do_not_disturb_on_outlined;
-
-                    if (opt == 'Passed') {
-                      bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
-                      borderC = isSel ? successColor : borderColor;
-                      textC = isSel ? const Color(0xFF15803D) : subtitleColor;
-                      iconData = Icons.check_circle_outlined;
-                    } else if (opt == 'Failed') {
-                      bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
-                      borderC = isSel ? errorColor : borderColor;
-                      textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
-                      iconData = Icons.cancel_outlined;
-                    }
-
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => statusMap[label] = opt),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(vertical: 9),
-                          decoration: BoxDecoration(
-                            color: bg,
-                            border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(iconData, size: 13, color: textC),
-                              const SizedBox(width: 4),
-                              Text(
-                                opt,
-                                style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+              if (_model.inspectionNature == 'Verification') ...[
+                const SizedBox(height: 12),
+                const Text('VERIFICATION ORDER TYPE:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  children: ['NTC', 'NTCV', 'Abatement', 'Closure'].map((v) {
+                    final isSel = _model.verificationType == v;
+                    return ChoiceChip(
+                      label: Text(v, style: TextStyle(fontSize: 11, color: isSel ? Colors.white : colorNavy)),
+                      selected: isSel,
+                      selectedColor: colorPrimary,
+                      onSelected: (val) => setState(() => _model.verificationType = val ? v : null),
                     );
                   }).toList(),
                 ),
+              ],
+              if (_model.inspectionNature == 'Others') ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _natureOthersCtrl,
+                  decoration: const InputDecoration(labelText: 'Specify Other Nature', border: OutlineInputBorder()),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'III. REQUIREMENTS',
+          icon: Icons.folder_shared_outlined,
+          child: Column(
+            children: [
+              _buildYesNoNaRow(
+                'Fire Safety Compliance and Commissioning Report (FSCCR)',
+                _model.fsccrRequired,
+                (val) => setState(() => _model.fsccrRequired = val),
+              ),
+              const Divider(height: 18),
+              _buildYesNoNaRow(
+                'Fire Safety Maintenance Report (FSMR)',
+                _model.fsmrRequired,
+                (val) => setState(() => _model.fsmrRequired = val),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPassFailToggle(String label, String key, Map<String, String> map) {
-    final current = map[key];
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(
-            children: ['Passed', 'Failed', 'N/A'].map((opt) {
-              final isSel = current == opt;
-              Color bg = const Color(0xFFF1F5F9);
-              Color borderC = borderColor;
-              Color textC = subtitleColor;
-              IconData iconData = Icons.do_not_disturb_on_outlined;
-
-              if (opt == 'Passed') {
-                bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
-                borderC = isSel ? successColor : borderColor;
-                textC = isSel ? const Color(0xFF15803D) : subtitleColor;
-                iconData = Icons.check_circle_outlined;
-              } else if (opt == 'Failed') {
-                bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
-                borderC = isSel ? errorColor : borderColor;
-                textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
-                iconData = Icons.cancel_outlined;
-              }
-
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => map[key] = opt),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(iconData, size: 13, color: textC),
-                        const SizedBox(width: 4),
-                        Text(
-                          opt,
-                          style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChoiceToggleRow(String label, String? currentVal, Function(String) onChanged) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Row(
-            children: ['Passed', 'Failed', 'N/A'].map((opt) {
-              final isSel = currentVal == opt;
-              Color bg = const Color(0xFFF1F5F9);
-              Color borderC = borderColor;
-              Color textC = subtitleColor;
-              IconData iconData = Icons.do_not_disturb_on_outlined;
-
-              if (opt == 'Passed') {
-                bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
-                borderC = isSel ? successColor : borderColor;
-                textC = isSel ? const Color(0xFF15803D) : subtitleColor;
-                iconData = Icons.check_circle_outlined;
-              } else if (opt == 'Failed') {
-                bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
-                borderC = isSel ? errorColor : borderColor;
-                textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
-                iconData = Icons.cancel_outlined;
-              }
-
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onChanged(opt),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(iconData, size: 13, color: textC),
-                        const SizedBox(width: 4),
-                        Text(
-                          opt,
-                          style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildYesNoToggleRow(String label, String? currentVal, Function(String) onChanged) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        if (label.isNotEmpty)
-          Expanded(child: Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.w600))),
-        Row(
-          children: ['Yes', 'No', 'N/A'].map((opt) {
-            final isSel = currentVal == opt;
-            Color bg = const Color(0xFFF1F5F9);
-            Color borderC = borderColor;
-            Color textC = subtitleColor;
-
-            if (opt == 'Yes') {
-              bg = isSel ? const Color(0xFFDCFCE7) : surfaceColor;
-              borderC = isSel ? successColor : borderColor;
-              textC = isSel ? const Color(0xFF15803D) : subtitleColor;
-            } else if (opt == 'No') {
-              bg = isSel ? const Color(0xFFFEE2E2) : surfaceColor;
-              borderC = isSel ? errorColor : borderColor;
-              textC = isSel ? const Color(0xFFB91C1C) : subtitleColor;
-            }
-
-            return GestureDetector(
-              onTap: () => onChanged(opt),
-              child: Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: bg,
-                  border: Border.all(color: borderC, width: isSel ? 1.5 : 1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  opt,
-                  style: TextStyle(color: textC, fontWeight: isSel ? FontWeight.bold : FontWeight.w500, fontSize: 12),
-                ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'IV. GENERAL INFORMATION & PERMITS',
+          icon: Icons.storefront_outlined,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _businessNameCtrl,
+                decoration: const InputDecoration(labelText: 'Business Name *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.isEmpty ? 'Business name required' : null,
               ),
-            );
-          }).toList(),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _buildingNameCtrl,
+                decoration: const InputDecoration(labelText: 'Name of Building', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _addressCtrl,
+                decoration: const InputDecoration(labelText: 'Address *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.isEmpty ? 'Address required' : null,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _natureOfBusinessCtrl,
+                      decoration: const InputDecoration(labelText: 'Nature of Business', border: OutlineInputBorder()),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _contactNoCtrl,
+                      decoration: const InputDecoration(labelText: 'Contact No.', border: OutlineInputBorder()),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _ownerRepresentativeCtrl,
+                decoration: const InputDecoration(labelText: 'Name of Owner / Representative *', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('PERMIT NUMBERS & DATES ISSUED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('FSEC No.', _fsecNoCtrl, 'Date Issued', _fsecDateCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Building Permit No.', _buildingPermitNoCtrl, 'Date Issued', _buildingPermitDateCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Latest FSIC No.', _fsicNoLatestCtrl, 'Date Issued', _fsicDateCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Cert of Fire Drill No.', _fireDrillCertCtrl, 'Date Issued', _fireDrillDateCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Business Permit No.', _businessPermitNoCtrl, 'Date Issued', _businessPermitDateCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Fire Insurance Policy No.', _fireInsurancePolicyNoCtrl, 'Date Issued', _fireInsuranceDateCtrl),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildTextField(String label, {required TextEditingController controller, String? hint, bool isNum = false, int maxLines = 1}) {
+  // ==========================================
+  // STEP 2: BUILDING SPECS & OCCUPANCY
+  // ==========================================
+  Widget _buildStep2BuildingSpecsAndOccupancy() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: titleColor, fontSize: 12, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          maxLines: maxLines,
-          keyboardType: isNum ? TextInputType.number : TextInputType.text,
-          style: TextStyle(fontSize: 13, color: titleColor),
-          decoration: InputDecoration(
-            hintText: hint ?? 'Enter $label',
-            hintStyle: TextStyle(color: subtitleColor.withValues(alpha: 0.5), fontSize: 12),
-            filled: true,
-            fillColor: inputBgColor,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: primaryColor, width: 1.5)),
+        _buildSectionCard(
+          title: 'CONSTRUCTION TYPE',
+          icon: Icons.apartment_outlined,
+          child: Column(
+            children: CommercialChecklistModel.constructionTypes.map((type) {
+              return RadioListTile<String>(
+                title: Text(type, style: const TextStyle(fontSize: 12)),
+                value: type,
+                groupValue: _model.constructionType,
+                dense: true,
+                activeColor: colorPrimary,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (val) => setState(() => _model.constructionType = val),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'INTERIOR FINISHES',
+          icon: Icons.layers_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('WALLS / CEILING FINISH:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...CommercialChecklistModel.wallsCeilingFinishes.map((f) {
+                return RadioListTile<String>(
+                  title: Text(f, style: const TextStyle(fontSize: 11.5)),
+                  value: f,
+                  groupValue: _model.interiorFinishWalls,
+                  dense: true,
+                  activeColor: colorPrimary,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) => setState(() => _model.interiorFinishWalls = val),
+                );
+              }),
+              const Divider(height: 16),
+              const Text('FLOOR INTERIOR FINISH:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...CommercialChecklistModel.floorFinishes.map((f) {
+                return RadioListTile<String>(
+                  title: Text(f, style: const TextStyle(fontSize: 11.5)),
+                  value: f,
+                  groupValue: _model.interiorFinishFloor,
+                  dense: true,
+                  activeColor: colorPrimary,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) => setState(() => _model.interiorFinishFloor = val),
+                );
+              }),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'SECTIONAL OCCUPANCY (USAGE PER FLOOR)',
+          icon: Icons.stairs_outlined,
+          child: Column(
+            children: [
+              TextFormField(controller: _basementCtrl, decoration: const InputDecoration(labelText: 'Basement Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _groundFloorCtrl, decoration: const InputDecoration(labelText: 'Ground Floor Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _secondFloorCtrl, decoration: const InputDecoration(labelText: 'Second Floor Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _thirdFloorCtrl, decoration: const InputDecoration(labelText: 'Third Floor Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _fourthFloorCtrl, decoration: const InputDecoration(labelText: 'Fourth Floor Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _nthFloorCtrl, decoration: const InputDecoration(labelText: 'Nth Floor Usage', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'OCCUPANCY CLASSIFICATION & SPECS',
+          icon: Icons.info_outline,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value: _model.occupancyClassification,
+                decoration: const InputDecoration(labelText: 'General Occupancy Classification', border: OutlineInputBorder()),
+                items: CommercialChecklistModel.occupancyClassifications.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                onChanged: (v) => setState(() => _model.occupancyClassification = v),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _occupantLoadCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Max Occupant Load', suffixText: 'P/Flr', border: OutlineInputBorder()),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _numberOfStoriesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'No. of Stories', suffixText: 'Storey', border: OutlineInputBorder()),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _buildingHeightCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Building Height', suffixText: 'm', border: OutlineInputBorder()),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _model.isHighrise,
+                      decoration: const InputDecoration(labelText: 'Is Highrise?', border: OutlineInputBorder()),
+                      items: ['Yes', 'No'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (v) => setState(() => _model.isHighrise = v),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: surfaceColor,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: borderColor, width: 1),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.02),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
+  // ==========================================
+  // STEP 3: MEANS OF EGRESS
+  // ==========================================
+  Widget _buildStep3MeansOfEgress() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'V.A EXIT ACCESS - HORIZONTAL COMPONENTS',
+          icon: Icons.meeting_room_outlined,
+          child: Column(
+            children: CommercialChecklistModel.horizontalComponents.map((item) {
+              return _buildComponentDimRemarkRow(item, _model.egressAccessStatus, 'm');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'EXIT ACCESS REQUIREMENTS',
+          icon: Icons.fact_check_outlined,
+          child: Column(
+            children: CommercialChecklistModel.exitAccessRequirements.map((req) {
+              final idx = CommercialChecklistModel.exitAccessRequirements.indexOf(req);
+              final hasDim = idx < 4;
+              return _buildRequirementRow(req, _model.egressRequirementsStatus, hasDim: hasDim, dimUnit: 'm');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'V.B EXITS - CLEAR WIDTHS & COMPONENTS',
+          icon: Icons.door_sliding_outlined,
+          child: Column(
+            children: CommercialChecklistModel.exitComponentsList.map((comp) {
+              return _buildComponentDimRemarkRow(comp, _model.exitComponentsStatus, 'm');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'EXITS - SPECIFICATIONS & MECHANISMS',
+          icon: Icons.rule_outlined,
+          child: Column(
+            children: CommercialChecklistModel.exitSpecifications.map((spec) {
+              final idx = CommercialChecklistModel.exitSpecifications.indexOf(spec);
+              final hasDim = idx < 10;
+              return _buildRequirementRow(spec, _model.egressRequirementsStatus, hasDim: hasDim, dimUnit: idx >= 4 && idx <= 8 ? 'mm' : 'm');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'V.C EXITS DISCHARGE',
+          icon: Icons.output_outlined,
+          child: Column(
+            children: CommercialChecklistModel.exitDischargeRequirements.map((item) {
+              final idx = CommercialChecklistModel.exitDischargeRequirements.indexOf(item);
+              final hasDim = idx < 2;
+              return _buildRequirementRow(item, _model.egressRequirementsStatus, hasDim: hasDim, dimUnit: 'm');
+            }).toList(),
+          ),
         ),
       ],
+    );
+  }
+
+  // ==========================================
+  // STEP 4: SIGNS, LIGHTING & HAZARDS
+  // ==========================================
+  Widget _buildStep4SignsLightingHazards() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'VI.A MARKING OF MEANS OF EGRESS (EXIT)',
+          icon: Icons.lightbulb_outlined,
+          child: Column(
+            children: CommercialChecklistModel.exitMarkingRequirements.map((item) {
+              final hasDim = item.contains('height');
+              return _buildRequirementRow(item, _model.exitSignageStatus, hasDim: hasDim, dimUnit: 'mm');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VI.B EMERGENCY EVACUATION PLAN & SIZES',
+          icon: Icons.map_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPassFailPills('Strategic conspicuous location', _model.exitSignageStatus['strategic'], (v) => setState(() => _model.exitSignageStatus['strategic'] = v)),
+              const SizedBox(height: 8),
+              _buildPassFailPills('Photo-luminescent background (12 items)', _model.exitSignageStatus['photo-luminescent'], (v) => setState(() => _model.exitSignageStatus['photo-luminescent'] = v)),
+              const Divider(height: 18),
+              const Text('EVACUATION PLAN STANDARD SIZES:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              const SizedBox(height: 8),
+              _buildRequirementRow('Floor area < 50 m² (330.2 x 215.9 mm)', _model.exitSignageStatus, customKey: '330.2', hasDim: true, dimUnit: 'mm'),
+              _buildRequirementRow('Floor area 50–150 m² (609.6 x 457.2 mm)', _model.exitSignageStatus, customKey: '50-150', hasDim: true, dimUnit: 'mm'),
+              _buildRequirementRow('Floor area >= 151 m² (609.6 x 914.4 mm)', _model.exitSignageStatus, customKey: '151', hasDim: true, dimUnit: 'mm'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VI.C ILLUMINATION OF MEANS OF EGRESS',
+          icon: Icons.flare_outlined,
+          child: Column(
+            children: CommercialChecklistModel.illuminationRequirements.map((item) {
+              final hasDim = item.contains('lux') || item.contains('hour');
+              return _buildRequirementRow(item, _model.exitSignageStatus, hasDim: hasDim, dimUnit: item.contains('hour') ? 'hrs' : 'lux');
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VII. HAZARDS IDENTIFICATION',
+          icon: Icons.warning_amber_outlined,
+          child: Column(
+            children: [
+              _buildTwoFieldRow('Hazard Contents', _hazardContentsCtrl, 'Quantity (Vol/Wt)', _hazardQuantityCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Hazard Placard', _hazardPlacardCtrl, 'Hazard ID No.', _hazardIdentificationNoCtrl),
+              const SizedBox(height: 8),
+              _buildTwoFieldRow('Class', _hazardClassCtrl, 'Flash Point', _flashPointCtrl),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _model.withinMaq,
+                      decoration: const InputDecoration(labelText: 'Within MAQ?', border: OutlineInputBorder()),
+                      items: ['Yes', 'No'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (v) => setState(() => _model.withinMaq = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _model.hazardClassification,
+                      decoration: const InputDecoration(labelText: 'Hazard Classification', border: OutlineInputBorder()),
+                      items: ['Low', 'Ordinary', 'High'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (v) => setState(() => _model.hazardClassification = v),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              const Text('A. FLAMMABLE LIQUIDS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...CommercialChecklistModel.flammableLiquidsRequirements.map((i) => _buildRequirementRow(i, _model.hazardStatus)),
+              const Divider(height: 16),
+              const Text('B. MISCELLANEOUS HAZARDS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...CommercialChecklistModel.miscHazardsRequirements.map((i) => _buildRequirementRow(i, _model.hazardStatus)),
+              const Divider(height: 16),
+              const Text('C. HOUSEKEEPING & WASTE DISPOSAL', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...CommercialChecklistModel.housekeepingRequirements.map((i) => _buildRequirementRow(i, _model.hazardStatus)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // STEP 5: FIRE PROTECTION SYSTEMS
+  // ==========================================
+  Widget _buildStep5FireProtectionSystems() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'VIII.A-C SPRINKLERS & STANDPIPE & PUMPS',
+          icon: Icons.water_drop_outlined,
+          child: Column(
+            children: [
+              _buildFireProtectionItem('Sprinkler Pumps', 'Check automatic start and pressure'),
+              _buildFireProtectionItem('Sprinkler Valves', 'Valves locked open, no leaks/corrosion'),
+              _buildFireProtectionItem('Sprinkler Water Flow Alarm', 'Test valve & manual alarm bell functions'),
+              const Divider(height: 16),
+              _buildFireProtectionItem('Cabinet Door Operative', 'Unobstructed and opens properly'),
+              _buildFireProtectionItem('Hose Condition', 'Not rotted, wet, or moldy'),
+              _buildFireProtectionItem('Nozzle', 'In place and operates correctly'),
+              _buildFireProtectionItem('Hose Hung Properly', 'Easily un-rolled if needed'),
+              _buildFireProtectionItem('Valves & Handles', 'Handles in place, open position'),
+              const Divider(height: 16),
+              _buildFireProtectionItem('Pump System', 'Inspect accuracy of gauges & sensors'),
+              _buildFireProtectionItem('Pipings', 'Check pipings for leaks'),
+              _buildFireProtectionItem('Motor', 'Check unusual noise or vibrations'),
+              _buildFireProtectionItem('Electrical System', 'Check corrosion, wire insulation, leaks'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VIII.D-F DETECTION, ALARM & LIFTS',
+          icon: Icons.notifications_active_outlined,
+          child: Column(
+            children: [
+              _buildFireProtectionItem('Fire Detection System', 'Random test call points & smoke detectors'),
+              _buildFireProtectionItem('Location Signs', 'Location signs legible and unobstructed'),
+              _buildFireProtectionItem('Alarm Panels', 'Alarm panels functioning & unobstructed'),
+              const Divider(height: 16),
+              _buildFireProtectionItem('Lifts', 'Home to ground floor during alarm test'),
+              _buildFireProtectionItem('Fans', 'Lift fans operate correctly'),
+              _buildFireProtectionItem('Fireman\'s lift', 'Fireman lift keyed to operate during test'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VIII.G FIRST AID FIRE PROTECTION (EXTINGUISHERS)',
+          icon: Icons.fire_extinguisher_outlined,
+          child: Column(
+            children: [
+              _buildFireProtectionItem('Extinguishers Size', 'Minimal sizes meet RA 9514 table 7 & 8'),
+              _buildFireProtectionItem('Extinguishers Quantity', 'Minimum quantity meets RA 9514 requirements'),
+              _buildFireProtectionItem('Extinguishers Location', 'All extinguishers in proper location'),
+              _buildFireProtectionItem('Extinguishers Location & Tags', 'Seals/tags intact, serviced in last 12 mos'),
+              _buildFireProtectionItem('Extinguishers Pressure', 'Pressure gauge reads in green area'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'VIII.H-K LIGHTING, KITCHEN, BSE & FIRE WALL',
+          icon: Icons.kitchen_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildFireProtectionItem('Emergency Lighting Battery', 'Battery lights turn on upon power outage'),
+              const Divider(height: 16),
+              _buildFireProtectionItem('Kitchen Hoods & Vents', 'Hoods, vents, fans free from grease'),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: TextFormField(
+                  initialValue: _model.itemDimensions['Hood Filters'] ?? '',
+                  decoration: const InputDecoration(labelText: 'Hood Filters - Date of Last Cleaning', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cleaning_services_outlined, size: 16)),
+                  onChanged: (v) => _model.itemDimensions['Hood Filters'] = v,
+                ),
+              ),
+              const Divider(height: 16),
+              const Text('BUILDING SERVICE EQUIPMENT (BSE):', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              _buildPassFailPills('1. Utilities (Cooking AKHFSS)', _model.bseUtilities, (v) => setState(() => _model.bseUtilities = v)),
+              _buildPassFailPills('2. HVAC (PMEC standard)', _model.bseHvac, (v) => setState(() => _model.bseHvac = v)),
+              _buildPassFailPills('3. Smoke Control Systems', _model.bseSmokeControl, (v) => setState(() => _model.bseSmokeControl = v)),
+              _buildPassFailPills('4. Rubbish / Laundry Chutes', _model.bseRubbishChutes, (v) => setState(() => _model.bseRubbishChutes = v)),
+              const Divider(height: 16),
+              const Text('FIRE WALL (FW):', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              _buildYesNoNaRow('Provided with Fire Wall (min 2-hr fire resistance)', _model.fireWallProvided, (v) => setState(() => _model.fireWallProvided = v)),
+              _buildYesNoNaRow('FW extension above roof surface >= 760mm', _model.fireWallExtension, (v) => setState(() => _model.fireWallExtension = v)),
+              DropdownButtonFormField<String>(
+                value: _model.fireWallType,
+                decoration: const InputDecoration(labelText: 'Fire Wall Type', border: OutlineInputBorder()),
+                items: [
+                  '125mm Solid Concrete',
+                  '150mm Solid Masonry',
+                  '200mm Hollow Unit Masonry',
+                ].map((w) => DropdownMenuItem(value: w, child: Text(w, style: const TextStyle(fontSize: 12)))).toList(),
+                onChanged: (v) => setState(() => _model.fireWallType = v),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // STEP 6: DEFECTS, RECOMMENDATIONS & SIGNATURES
+  // ==========================================
+  Widget _buildStep6DefectsAndSignatures() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'DEFECTS / DEFICIENCIES (ITEMIZED)',
+          icon: Icons.report_problem_outlined,
+          child: Column(
+            children: [
+              TextFormField(controller: _defectsItemIVCtrl, decoration: const InputDecoration(labelText: 'ITEM IV (General Info Defects)', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _defectsItemVCtrl, decoration: const InputDecoration(labelText: 'ITEM V (Means of Egress Defects)', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _defectsItemVICtrl, decoration: const InputDecoration(labelText: 'ITEM VI (Signs & Lighting Defects)', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _defectsItemVIICtrl, decoration: const InputDecoration(labelText: 'ITEM VII (Hazards Defects)', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _defectsItemVIIICtrl, decoration: const InputDecoration(labelText: 'ITEM VIII (Fire Protection Defects)', border: OutlineInputBorder(), contentPadding: EdgeInsets.all(12))),
+              const SizedBox(height: 8),
+              TextFormField(controller: _defectsSummaryCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Overall Summary / Corrective Directives', border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'ATTACHED PICTURES & EVIDENCE',
+          icon: Icons.camera_alt_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Attached Photos (${_photoUrls.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorNavy)),
+                  TextButton.icon(
+                    onPressed: _isUploading ? null : _pickAndUploadPhoto,
+                    icon: _isUploading
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.add_a_photo_outlined, size: 16, color: colorPrimary),
+                    label: const Text('Add Photo', style: TextStyle(color: colorPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              if (_photoUrls.isNotEmpty)
+                SizedBox(
+                  height: 90,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _photoUrls.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, idx) {
+                      final url = _photoUrls[idx];
+                      return Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: url.startsWith('http')
+                                ? Image.network(url, width: 85, height: 85, fit: BoxFit.cover)
+                                : Image.file(File(url), width: 85, height: 85, fit: BoxFit.cover),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: GestureDetector(
+                              onTap: () => setState(() => _photoUrls.removeAt(idx)),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                child: const Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'IX. RECOMMENDATIONS',
+          icon: Icons.recommend_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RadioListTile<String>(
+                title: const Text('Comply defects and pay fees for issuance of FSIC', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                value: 'FSIC',
+                groupValue: _model.recommendationAction,
+                dense: true,
+                activeColor: colorSuccess,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (v) => setState(() => _model.recommendationAction = v),
+              ),
+              const Divider(height: 12),
+              const Text('OR FOR ISSUANCE OF:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorTextSecondary)),
+              ...[
+                'Notice to Comply',
+                'Notice to Correct Violation',
+                'Closure Order',
+                'Abatement Order with Administrative Fine',
+                'Notice of Disapproval (NOD)',
+              ].map((opt) {
+                return RadioListTile<String>(
+                  title: Text(opt, style: const TextStyle(fontSize: 12)),
+                  value: opt,
+                  groupValue: _model.recommendationAction,
+                  dense: true,
+                  activeColor: colorError,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (v) => setState(() => _model.recommendationAction = v),
+                );
+              }),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _recommendationNotesCtrl,
+                decoration: const InputDecoration(labelText: 'Additional Order Notes / Grace Period', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildSectionCard(
+          title: 'SIGNATORIES & OFFICIAL APPROVALS',
+          icon: Icons.draw_outlined,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _ownerRepresentativeCtrl,
+                decoration: const InputDecoration(labelText: 'Acknowledged By (Owner / Representative) *', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _inspectorNameCtrl,
+                decoration: const InputDecoration(labelText: 'Fire Safety Inspector/s *', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _teamLeaderNameCtrl,
+                decoration: const InputDecoration(labelText: 'Team Leader *', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _chiefFsedNameCtrl,
+                decoration: const InputDecoration(labelText: 'Recommend Approval (Chief, FSES/FSED)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _fireMarshalNameCtrl,
+                decoration: const InputDecoration(labelText: 'Approval (City / Municipal Fire Marshal)', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // REUSABLE FORM WIDGETS
+  // ==========================================
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: colorPrimary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colorNavy, letterSpacing: 0.2),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceChip(String key, String label) {
+    final isSelected = _model.inspectionNature == key;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : colorNavy)),
+      selected: isSelected,
+      selectedColor: colorPrimary,
+      backgroundColor: colorBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isSelected ? colorPrimary : colorBorder)),
+      onSelected: (val) {
+        if (val) setState(() => _model.inspectionNature = key);
+      },
+    );
+  }
+
+  Widget _buildTwoFieldRow(String lbl1, TextEditingController ctrl1, String lbl2, TextEditingController ctrl2) {
+    return Row(
+      children: [
+        Expanded(child: TextFormField(controller: ctrl1, decoration: InputDecoration(labelText: lbl1, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12)))),
+        const SizedBox(width: 8),
+        Expanded(child: TextFormField(controller: ctrl2, decoration: InputDecoration(labelText: lbl2, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12)))),
+      ],
+    );
+  }
+
+  Widget _buildPassFailPills(String label, String? currentStatus, Function(String) onSelected) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 12, color: colorNavy))),
+          const SizedBox(width: 8),
+          _buildPill('Passed', currentStatus == 'Passed', colorSuccess, () => onSelected('Passed')),
+          const SizedBox(width: 4),
+          _buildPill('Failed', currentStatus == 'Failed', colorError, () => onSelected('Failed')),
+          const SizedBox(width: 4),
+          _buildPill('N/A', currentStatus == 'N/A', colorTextSecondary, () => onSelected('N/A')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPill(String text, bool active, Color activeColor, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: active ? activeColor : colorBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: active ? activeColor : colorBorder),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: active ? Colors.white : colorNavy),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYesNoNaRow(String label, String? currentVal, Function(String) onSelected) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 12, color: colorNavy))),
+          const SizedBox(width: 8),
+          _buildPill('Yes', currentVal == 'Yes', colorSuccess, () => onSelected('Yes')),
+          const SizedBox(width: 4),
+          _buildPill('No', currentVal == 'No', colorError, () => onSelected('No')),
+          const SizedBox(width: 4),
+          _buildPill('N/A', currentVal == 'N/A', colorTextSecondary, () => onSelected('N/A')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComponentDimRemarkRow(String name, Map<String, String> statusMap, String unit) {
+    final status = statusMap[name];
+    final dim = _model.itemDimensions[name] ?? '';
+    final remark = _model.itemRemarks[name] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorNavy))),
+              _buildPill('Passed', status == 'Passed', colorSuccess, () => setState(() => statusMap[name] = 'Passed')),
+              const SizedBox(width: 4),
+              _buildPill('Failed', status == 'Failed', colorError, () => setState(() => statusMap[name] = 'Failed')),
+              const SizedBox(width: 4),
+              _buildPill('N/A', status == 'N/A', colorTextSecondary, () => setState(() => statusMap[name] = 'N/A')),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              SizedBox(
+                width: 90,
+                child: TextFormField(
+                  initialValue: dim,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    hintText: 'Dim',
+                    suffixText: unit,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  onChanged: (val) => _model.itemDimensions[name] = val,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  initialValue: remark,
+                  decoration: const InputDecoration(
+                    hintText: 'Remarks / Corrective Action',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  onChanged: (val) => _model.itemRemarks[name] = val,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementRow(String text, Map<String, String> statusMap, {bool hasDim = false, String dimUnit = 'm', String? customKey}) {
+    final key = customKey ?? text;
+    final status = statusMap[key];
+    final dim = _model.itemDimensions[key] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(text, style: const TextStyle(fontSize: 11.5, color: colorNavy))),
+              const SizedBox(width: 6),
+              _buildPill('Passed', status == 'Passed', colorSuccess, () => setState(() => statusMap[key] = 'Passed')),
+              const SizedBox(width: 4),
+              _buildPill('Failed', status == 'Failed', colorError, () => setState(() => statusMap[key] = 'Failed')),
+              const SizedBox(width: 4),
+              _buildPill('N/A', status == 'N/A', colorTextSecondary, () => setState(() => statusMap[key] = 'N/A')),
+            ],
+          ),
+          if (hasDim) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                SizedBox(
+                  width: 100,
+                  child: TextFormField(
+                    initialValue: dim,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: 'Actual Dim',
+                      suffixText: dimUnit,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    ),
+                    style: const TextStyle(fontSize: 11),
+                    onChanged: (v) => _model.itemDimensions[key] = v,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const Divider(height: 10),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFireProtectionItem(String title, String procedure) {
+    final status = _model.fireProtectionStatus[title];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorNavy)),
+                    Text(procedure, style: const TextStyle(fontSize: 10.5, color: colorTextSecondary)),
+                  ],
+                ),
+              ),
+              _buildPill('Passed', status == 'Passed', colorSuccess, () => setState(() => _model.fireProtectionStatus[title] = 'Passed')),
+              const SizedBox(width: 4),
+              _buildPill('Failed', status == 'Failed', colorError, () => setState(() => _model.fireProtectionStatus[title] = 'Failed')),
+              const SizedBox(width: 4),
+              _buildPill('N/A', status == 'N/A', colorTextSecondary, () => setState(() => _model.fireProtectionStatus[title] = 'N/A')),
+            ],
+          ),
+          const Divider(height: 10),
+        ],
+      ),
     );
   }
 }

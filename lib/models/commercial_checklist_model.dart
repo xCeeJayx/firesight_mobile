@@ -51,7 +51,7 @@ class CommercialChecklistModel {
   String nthFloorUsage;
 
   // General Occupancy Classification
-  String? occupancyClassification; // Assembly, Educational, Day Care, Health Care, Detention, Residential, Residential Board and Care, Mercantile, Business, Industrial, Storage, Special Structure
+  String? occupancyClassification;
 
   // Other Information
   String occupantLoad;
@@ -101,10 +101,28 @@ class CommercialChecklistModel {
   String defectsItemVIII;
 
   String? recommendationAction; // 'FSIC', 'NoticeToComply', 'NoticeToCorrectViolation', 'ClosureOrder', 'AbatementOrder', 'NOD'
+  String recommendationNotes;
   String inspectorName;
   String teamLeaderName;
   String chiefFsedName;
+  String get chiefFsesName => chiefFsedName;
+  set chiefFsesName(String val) => chiefFsedName = val;
+
+  Map<String, String> get exitWayStatus => {
+        ...egressAccessStatus,
+        ...exitComponentsStatus,
+        ...egressRequirementsStatus,
+      };
+
+  Map<String, String> get bseStatus => {
+        'Utilities AKHFSS': bseUtilities ?? '',
+        'HVAC PMEC': bseHvac ?? '',
+        'Smoke Control System': bseSmokeControl ?? '',
+        'Rubbish Chutes': bseRubbishChutes ?? '',
+      };
+
   String fireMarshalName;
+  String ownerSignatureUrl;
 
   CommercialChecklistModel({
     this.ioNumber = '',
@@ -177,10 +195,12 @@ class CommercialChecklistModel {
     this.defectsItemVII = '',
     this.defectsItemVIII = '',
     this.recommendationAction,
+    this.recommendationNotes = '',
     this.inspectorName = '',
     this.teamLeaderName = '',
     this.chiefFsedName = '',
     this.fireMarshalName = '',
+    this.ownerSignatureUrl = '',
   })  : egressAccessStatus = egressAccessStatus ?? {},
         exitComponentsStatus = exitComponentsStatus ?? {},
         egressRequirementsStatus = egressRequirementsStatus ?? {},
@@ -189,6 +209,141 @@ class CommercialChecklistModel {
         fireProtectionStatus = fireProtectionStatus ?? {},
         itemDimensions = itemDimensions ?? {},
         itemRemarks = itemRemarks ?? {};
+
+  // ==========================================
+  // CANONICAL SECTIONS DATA DICTIONARY
+  // ==========================================
+  static const List<String> constructionTypes = [
+    'Type I : Concrete & Steel (Fire Resistive)',
+    'Type II : Concrete & Exposed Steel (Noncombustible)',
+    'Type III : Concrete & Wood (Ordinary)',
+    'Type IV : Heavy Timber (Large mass wood)',
+    'Type V : Wood frame (Lightweight wood)',
+  ];
+
+  static const List<String> wallsCeilingFinishes = [
+    'Class A : Flame spread index, 0–25; smoke developed index, 0–450',
+    'Class B : Flame spread index, 26–75; smoke developed index, 0–450',
+    'Class C : Flame spread index, 76–200; smoke developed index, 0–450',
+  ];
+
+  static const List<String> floorFinishes = [
+    'Class I : Critical radiant flux, not less than 0.45 W/cm2',
+    'Class II : Critical radiant flux, not more than 0.22 W/cm2, but less than 0.45 W/cm2',
+  ];
+
+  static const List<String> occupancyClassifications = [
+    'Assembly',
+    'Educational',
+    'Day Care',
+    'Health Care',
+    'Detention and Correctional',
+    'Residential',
+    'Residential Board and Care',
+    'Mercantile',
+    'Business',
+    'Industrial',
+    'Storage',
+    'Special Structure',
+  ];
+
+  static const List<String> horizontalComponents = [
+    'Doors',
+    'Corridors / Hallways',
+    'Passageways',
+    'Lobby / Anteroom',
+    'Ramps',
+    'Common path of travel',
+    'Dead end',
+    'Travel distance',
+  ];
+
+  static const List<String> exitAccessRequirements = [
+    'Any door leaf in a means of egress shall leave not less than one-half of the required width of an aisle, a corridor, a passageway, or a landing unobstructed.',
+    'Any door leaf in a means of egress shall not project more than 180 mm into the required width of an aisle, a corridor, a passageway, or a landing, unless the door leaf is equipped with an approved self-closing device.',
+    'At least two (2) means of egress for each room with occupant load >= 50 or with hazard content.',
+    'Each guest door used as means of egress shall at least 20 minutes fire resistant.',
+    'Doors that open directly onto exit access corridors shall be self-closing and self-latching.',
+    'There shall no openings in corridor partitions other than door openings.',
+    'Free from any obstruction.',
+    'No flammable material stored.',
+  ];
+
+  static const List<String> exitComponentsList = [
+    'Exits Doors',
+    'Normal Stairs',
+    'Curve stairs',
+    'Winding Stairs',
+    'Horizontal Exits',
+    'Outside Stairs',
+    'Exit Passageways',
+    'Fire Escape Stairs',
+    'Fire Escape Ladders',
+    'Slide Escape',
+  ];
+
+  static const List<String> exitSpecifications = [
+    'At least two (2) means of egress for each floor.',
+    'Doors assembly: 60 minutes fire resistant for three (3) communicating level and below.',
+    'Doors assembly: 90 minutes fire resistant for four (4) communicating level and above.',
+    'Exits Doors provided with Re-entry mechanism at every four (4) storey.',
+    'Stair thread: Minimum depth = 280 mm.',
+    'Stair riser: Minimum / Maximum height = 100 mm / 180 mm.',
+    'Minimum stair head room: 2000mm',
+    'Stair provided with Guard and Handrails.',
+    'Maximum handrails projections: 114 mm.',
+    'Stair landing shall not be less than the required width of exit door.',
+    'Exits doors open and close properly',
+    'Doors swing in direction of egress.',
+    'Exit Doors provided with panic hardware, vision panel, and self-closing mechanism.',
+    'There shall be no enclosed usable space under the stairs in an exit enclosure nor shall the open space under such stairs be used for any purpose.',
+    'Interior finish: Class B',
+  ];
+
+  static const List<String> exitDischargeRequirements = [
+    'Remoteness of exit discharge not less than 1/2 of length of the overall dimension of the building or area to be served.',
+    'Remoteness of exit discharge not less than 1/3 of length of the overall dimension of the building or area to be served is the bldg. is protected throughout by ASASS.',
+    'Exterior grounds are kept clear of objects that might impede evacuation or firefighting equipment',
+    'Terminate directly at a public way or at an exterior exit discharge.',
+  ];
+
+  static const List<String> exitMarkingRequirements = [
+    'Minimum letter height, 150 mm',
+    'EXIT signs are posted along Exit access, Exits and Exit discharge',
+    'EXIT signs are properly illuminated',
+  ];
+
+  static const List<String> evacPlanSizes = [
+    'Size 330.2 mm wide * 215.9 mm height (Floor area < 50 m2)',
+    'Size 609.6 mm wide * 457.2 mm height (Floor area = 50 - 150 m2)',
+    'Size 609.6 mm wide * 457.2 mm height (Floor area >= 151m2)',
+  ];
+
+  static const List<String> illuminationRequirements = [
+    'Floors and other walking surfaces: shall be at least 1 ft-candle (10.8 lux), measured at the floor.',
+    'In assembly occupancies: walking surfaces of exit access shall be at least 0.2 ft-candle (2.2 lux)',
+    'Stairs: shall be at least 10 ft-candle (108 lux), measured at the walking surfaces.',
+    'Emergency Lighting: Illumination not less than average 1 ft-candle (10.8 lux) and min 0.1 ft-candle (1.1 lux)',
+    'Emergency lighting system operates automatically for at least 1.5-hour.',
+    'Periodic Testing of Emergency Lighting Equipment (Written record)',
+  ];
+
+  static const List<String> flammableLiquidsRequirements = [
+    'Stored in sealed metal containers',
+    'Properly dispensed as per SOP',
+    'Provided with "NO SMOKING" sign',
+  ];
+
+  static const List<String> miscHazardsRequirements = [
+    'All no smoking areas has adequate signs',
+    'Gasoline / Diesel stored in proper place & metal safety can',
+  ];
+
+  static const List<String> housekeepingRequirements = [
+    'Brooms, mops, rags stored in metal cabinets or approved cans',
+    'Paints, solvents stored in metal cabinet; oily rags in metal containers',
+    'Dry leaves, shrubbery trimmings kept away from buildings',
+  ];
 
   Map<String, dynamic> toJson() {
     return {
@@ -276,11 +431,13 @@ class CommercialChecklistModel {
         'itemVIII': defectsItemVIII,
       },
       'recommendationAction': recommendationAction,
+      'recommendationNotes': recommendationNotes,
       'signatories': {
         'inspectorName': inspectorName,
         'teamLeaderName': teamLeaderName,
         'chiefFsedName': chiefFsedName,
         'fireMarshalName': fireMarshalName,
+        'ownerSignatureUrl': ownerSignatureUrl,
       },
     };
   }
@@ -366,10 +523,12 @@ class CommercialChecklistModel {
       defectsItemVII: (itmDef['itemVII'] ?? json['defectsItemVII'] ?? '').toString(),
       defectsItemVIII: (itmDef['itemVIII'] ?? json['defectsItemVIII'] ?? (json['defectsSummary'] ?? '')).toString(),
       recommendationAction: json['recommendationAction']?.toString() ?? json['recommendation']?.toString() ?? json['compliance_status']?.toString(),
+      recommendationNotes: (json['recommendationNotes'] ?? json['recommendation_notes'] ?? '').toString(),
       inspectorName: (sig['inspectorName'] ?? json['inspectorName'] ?? json['inspector_name'] ?? '').toString(),
       teamLeaderName: (sig['teamLeaderName'] ?? json['teamLeaderName'] ?? json['team_leader_name'] ?? '').toString(),
       chiefFsedName: (sig['chiefFsedName'] ?? json['chiefFsedName'] ?? '').toString(),
       fireMarshalName: (sig['fireMarshalName'] ?? json['fireMarshalName'] ?? json['fire_marshal_name'] ?? '').toString(),
+      ownerSignatureUrl: (sig['ownerSignatureUrl'] ?? json['ownerSignatureUrl'] ?? '').toString(),
     );
   }
 }

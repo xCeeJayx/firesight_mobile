@@ -16,6 +16,7 @@ class FireInspectorDashboard extends StatefulWidget {
 
 class _FireInspectorDashboardState extends State<FireInspectorDashboard> {
   late Future<Map<String, int>> _operationsCounterFuture;
+  late Future<List<Map<String, dynamic>>> _assignedInspectionsFuture;
 
   String _inspectorName = 'Fire Inspector';
   String _badgeNumber = 'BFP-9531';
@@ -40,6 +41,7 @@ class _FireInspectorDashboardState extends State<FireInspectorDashboard> {
   void _refreshData() {
     setState(() {
       _operationsCounterFuture = _fetchOperationsCounters();
+      _assignedInspectionsFuture = _fetchAssignedInspections();
     });
     EmergencyService().fetchReports();
   }
