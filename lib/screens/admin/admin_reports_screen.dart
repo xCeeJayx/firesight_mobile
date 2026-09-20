@@ -72,6 +72,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         final bName = (s['barangay_name'] ?? s['barangay'] ?? '').toString().trim();
         if (bName.isEmpty) continue;
 
+        final sType = (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase().trim();
+        final sDataChecklistType = (s['survey_data'] is Map ? s['survey_data']['checklist_type'] : '').toString().toLowerCase().trim();
+        final isH2H = sType == 'house_to_house' || sType == 'h2h' || sDataChecklistType == 'house_to_house';
+        if (isH2H) continue; // Only CFPP surveys determine barangay community risk
+
         final risk = (s['risk_level'] ?? s['vulnerability_rating'] ?? '').toString().toLowerCase();
         final isHigh = risk.contains('high') || risk.contains('critical');
         final isMod = risk.contains('mod') || risk.contains('medium');

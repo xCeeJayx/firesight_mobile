@@ -447,22 +447,29 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
                             Text(
                               'IO #$ioNo • $dateStr',
                               style: const TextStyle(fontSize: 12, color: colorTextSecondary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _getRecColor(rec).withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    rec.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: _getRecColor(rec),
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _getRecColor(rec).withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      _formatRecBadge(rec),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: _getRecColor(rec),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -570,7 +577,7 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              rec,
+              _formatFullRecommendation(rec),
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _getRecColor(rec)),
             ),
           ),
@@ -625,10 +632,37 @@ class _InspectorReportsScreenState extends State<InspectorReportsScreen> {
     );
   }
 
+  String _formatRecBadge(String rec) {
+    final s = rec.trim().toUpperCase();
+    if (s.contains('FSIC') || s.contains('ISSUANCE')) return 'FSIC';
+    if (s.contains('NTCV') || s.contains('CORRECT VIOLATION')) return 'NTCV';
+    if (s.contains('NTC') || s.contains('COMPLY')) return 'NTC';
+    if (s.contains('NOD') || s.contains('DISAPPROVAL')) return 'NOD';
+    if (s.contains('CLOSURE')) return 'CLOSURE';
+    if (s.contains('ABATEMENT')) return 'ABATEMENT';
+    if (s.contains('DISPATCH')) return 'DISPATCHED';
+    if (s.contains('PENDING') || s.contains('SCHEDULE') || s.contains('ASSIGN')) return 'PENDING';
+    if (s.length > 16) return 'DISPATCHED';
+    return s;
+  }
+
+  String _formatFullRecommendation(String rec) {
+    final s = rec.trim().toUpperCase();
+    if (s.contains('FSIC') || s.contains('ISSUANCE')) return 'Issuance of FSIC';
+    if (s.contains('NTCV') || s.contains('CORRECT VIOLATION')) return 'Notice to Correct Violation (NTCV)';
+    if (s.contains('NTC') || s.contains('COMPLY')) return 'Notice to Comply (NTC)';
+    if (s.contains('NOD') || s.contains('DISAPPROVAL')) return 'Notice of Disapproval (NOD)';
+    if (s.contains('CLOSURE')) return 'Closure Order';
+    if (s.contains('ABATEMENT')) return 'Abatement Order';
+    if (s.contains('DISPATCH')) return 'Inspection Order Dispatched';
+    if (s.contains('PENDING') || s.contains('SCHEDULE') || s.contains('ASSIGN')) return 'Pending On-Site Inspection';
+    return rec;
+  }
+
   Color _getRecColor(String rec) {
     final r = rec.toUpperCase();
-    if (r.contains('FSIC') || r.contains('ISSUANCE')) return colorSuccess;
-    if (r.contains('NTCV') || r.contains('VIOLATION')) return colorDanger;
+    if (r.contains('FSIC') || r.contains('ISSUANCE') || r.contains('PASS')) return colorSuccess;
+    if (r.contains('NTCV') || r.contains('VIOLATION') || r.contains('CLOSURE') || r.contains('ABATEMENT')) return colorDanger;
     return colorWarning;
   }
 }

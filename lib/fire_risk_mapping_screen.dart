@@ -791,7 +791,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                       border: Border.all(color: bgy.riskColor),
                     ),
                     child: Text(
-                      '${bgy.riskLevel.toUpperCase()} RISK',
+                      bgy.riskBadgeLabel,
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: bgy.riskColor),
                     ),
                   ),
@@ -1610,6 +1610,8 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                   _buildLegendItem(const Color(0xFFD97706), 'Med'),
                   const SizedBox(width: 8),
                   _buildLegendItem(const Color(0xFF16A34A), 'Low'),
+                  const SizedBox(width: 8),
+                  _buildLegendItem(const Color(0xFF94A3B8), 'Unassessed'),
                 ],
               ),
             ),

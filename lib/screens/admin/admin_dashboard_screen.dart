@@ -98,6 +98,10 @@ class _StationOfficerDashboardState extends State<StationOfficerDashboard> {
       final surveysRes = await client.from('fire_risk_surveys').select();
       final surveysList = List<Map<String, dynamic>>.from(surveysRes as List);
       highRiskBarangays = surveysList.where((s) {
+        final sType = (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase().trim();
+        final sDataChecklistType = (s['survey_data'] is Map ? s['survey_data']['checklist_type'] : '').toString().toLowerCase().trim();
+        final isH2H = sType == 'house_to_house' || sType == 'h2h' || sDataChecklistType == 'house_to_house';
+        if (isH2H) return false;
         final rating = (s['vulnerability_rating'] ?? s['risk_level'] ?? '').toString().toLowerCase();
         return rating.contains('high') || rating.contains('critical');
       }).length;

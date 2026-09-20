@@ -297,7 +297,7 @@ class AirSummaryPdfService {
             pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4.5),
               child: pw.Text(
-                rec.toUpperCase(),
+                _formatRecommendation(rec),
                 style: pw.TextStyle(
                   fontSize: 7.5,
                   fontWeight: pw.FontWeight.bold,
@@ -367,11 +367,25 @@ class AirSummaryPdfService {
     );
   }
 
+  static String _formatRecommendation(String rec) {
+    final s = rec.trim().toUpperCase();
+    if (s.contains('FSIC') || s.contains('ISSUANCE') || s.contains('PASS')) return 'FSIC';
+    if (s.contains('NTCV') || s.contains('VIOLATION')) return 'NTCV';
+    if (s.contains('NTC') || s.contains('COMPLY')) return 'NTC';
+    if (s.contains('NOD') || s.contains('DISAPPROVAL')) return 'NOD';
+    if (s.contains('CLOSURE')) return 'CLOSURE';
+    if (s.contains('ABATEMENT')) return 'ABATEMENT';
+    if (s.contains('DISPATCH')) return 'DISPATCHED';
+    if (s.contains('PENDING') || s.contains('SCHEDULE') || s.contains('ASSIGN')) return 'PENDING';
+    if (s.length > 15) return 'DISPATCHED';
+    return s;
+  }
+
   static PdfColor _getRecommendationColor(String rec) {
     final r = rec.toUpperCase();
-    if (r.contains('FSIC') || r.contains('PASS')) return PdfColors.green800;
-    if (r.contains('NTCV') || r.contains('VIOLATION')) return PdfColors.red800;
+    if (r.contains('FSIC') || r.contains('PASS') || r.contains('ISSUANCE')) return PdfColors.green800;
+    if (r.contains('NTCV') || r.contains('VIOLATION') || r.contains('CLOSURE') || r.contains('ABATEMENT')) return PdfColors.red800;
     if (r.contains('NTC') || r.contains('COMPLY')) return PdfColors.amber800;
-    return PdfColors.blue800;
+    return PdfColors.amber800;
   }
 }

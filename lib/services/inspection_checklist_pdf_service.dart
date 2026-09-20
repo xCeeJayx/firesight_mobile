@@ -19,15 +19,15 @@ class InspectionChecklistPdfService {
     left: 54,
     right: 46,
     top: 36,
-    bottom: 38,
+    bottom: 36,
   );
 
-  // Typography tokens calibrated to official DOCX Arial points
-  static const double textSm = 7.5;
-  static const double textBase = 8.5;
-  static const double textMd = 9.5;
-  static const double textHeading = 10.0;
-  static const double textLg = 11.5;
+  // Typography tokens calibrated to official government standard Arial points
+  static const double textSm = 8.5;
+  static const double textBase = 10.0;
+  static const double textMd = 10.5;
+  static const double textHeading = 11.5;
+  static const double textLg = 13.5;
 
   static const Map<String, List<String>> _keyAliases = {
     'Any door leaf in a means of egress shall leave not less than one-half of the required width of an aisle, a corridor, a passageway, or a landing unobstructed.': [
@@ -412,16 +412,16 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         if (dilgLogo != null)
-          pw.Container(width: 52, height: 52, child: pw.Image(dilgLogo, fit: pw.BoxFit.contain))
+          pw.Container(width: 56, height: 56, child: pw.Image(dilgLogo, fit: pw.BoxFit.contain))
         else
-          pw.SizedBox(width: 52, height: 52),
+          pw.SizedBox(width: 56, height: 56),
         pw.Expanded(
           child: pw.Column(
             mainAxisSize: pw.MainAxisSize.min,
             children: [
               pw.Text(
                 'Republic of the Philippines',
-                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
                 textAlign: pw.TextAlign.center,
               ),
               pw.SizedBox(height: 1),
@@ -433,22 +433,22 @@ class InspectionChecklistPdfService {
               pw.SizedBox(height: 1),
               pw.Text(
                 'BUREAU OF FIRE PROTECTION',
-                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(fontSize: 12.0, fontWeight: pw.FontWeight.bold),
                 textAlign: pw.TextAlign.center,
               ),
               pw.SizedBox(height: 1),
               pw.Text(
                 stationName,
-                style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
                 textAlign: pw.TextAlign.center,
               ),
             ],
           ),
         ),
         if (bfpLogo != null)
-          pw.Container(width: 52, height: 52, child: pw.Image(bfpLogo, fit: pw.BoxFit.contain))
+          pw.Container(width: 56, height: 56, child: pw.Image(bfpLogo, fit: pw.BoxFit.contain))
         else
-          pw.SizedBox(width: 52, height: 52),
+          pw.SizedBox(width: 56, height: 56),
       ],
     );
   }
@@ -456,10 +456,10 @@ class InspectionChecklistPdfService {
   static pw.Widget _footer(int pageNum) {
     return pw.Container(
       alignment: pw.Alignment.centerLeft,
-      margin: const pw.EdgeInsets.only(top: 8),
+      margin: const pw.EdgeInsets.only(top: 6),
       child: pw.Text(
         'BFP-QSF-FSED-061 Rev. 00 (06.17.22) Page $pageNum of 10',
-        style: const pw.TextStyle(fontSize: textSm, color: PdfColors.black),
+        style: const pw.TextStyle(fontSize: 8.0, color: PdfColors.black),
       ),
     );
   }
@@ -469,7 +469,7 @@ class InspectionChecklistPdfService {
   // ==========================================
   static pw.Widget _sectionTitle(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 6, bottom: 3),
+      padding: const pw.EdgeInsets.only(top: 8, bottom: 4),
       child: pw.Text(
         text,
         style: pw.TextStyle(fontSize: textHeading, fontWeight: pw.FontWeight.bold),
@@ -491,14 +491,14 @@ class InspectionChecklistPdfService {
       children: [
         pw.Text('[ ', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold)),
         pw.CustomPaint(
-          size: const PdfPoint(6.5, 6.5),
+          size: const PdfPoint(7.0, 7.0),
           painter: (PdfGraphics canvas, PdfPoint size) {
             canvas
               ..setColor(PdfColors.black)
-              ..setLineWidth(1.1)
-              ..moveTo(0.5, 3.5)
-              ..lineTo(2.4, 0.8)
-              ..lineTo(6.4, 6.4)
+              ..setLineWidth(1.2)
+              ..moveTo(0.5, 3.8)
+              ..lineTo(2.6, 1.0)
+              ..lineTo(6.8, 6.8)
               ..strokePath();
           },
         ),
@@ -508,9 +508,9 @@ class InspectionChecklistPdfService {
   }
 
   /// Full-width underline row with fixed colon tab stop
-  static pw.Widget _underlineRow(String label, String value, {double labelWidth = 175}) {
+  static pw.Widget _underlineRow(String label, String value, {double labelWidth = 195, double verticalPadding = 4.5}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1.2),
+      padding: pw.EdgeInsets.symmetric(vertical: verticalPadding),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
@@ -572,21 +572,21 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 14),
         pw.Center(
           child: pw.Text(
             'FIRE SAFETY INSPECTION CHECKLIST',
             style: pw.TextStyle(fontSize: textLg, fontWeight: pw.FontWeight.bold),
           ),
         ),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 14),
 
         // I. REFERENCE
         _sectionTitle('I.        REFERENCE:'),
-        _underlineRow('Inspection Order No. (IO)', model.ioNumber, labelWidth: 160),
-        _underlineRow('Date Issued', model.dateIssued, labelWidth: 160),
-        _underlineRow('Date Inspected', model.dateInspected, labelWidth: 160),
-        pw.SizedBox(height: 6),
+        _underlineRow('Inspection Order No. (IO)', model.ioNumber, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Date Issued', model.dateIssued, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Date Inspected', model.dateInspected, labelWidth: 195, verticalPadding: 4.5),
+        pw.SizedBox(height: 14),
 
         // II. NATURE OF INSPECTION CONDUCTED
         _sectionTitle('II.       NATURE OF INSPECTION CONDUCTED (Check appropriate box)'),
@@ -601,28 +601,28 @@ class InspectionChecklistPdfService {
                 pw.SizedBox(width: 4),
                 pw.Text('Inspection during construction', style: const pw.TextStyle(fontSize: textBase)),
               ]),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(children: [
                 pw.Text('2. ', style: const pw.TextStyle(fontSize: textBase)),
                 _bracketCheck(isPeza),
                 pw.SizedBox(width: 4),
                 pw.Text('FSIC for Certificate of Annual Inspection (PEZA)', style: const pw.TextStyle(fontSize: textBase)),
               ]),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(children: [
                 pw.Text('3. ', style: const pw.TextStyle(fontSize: textBase)),
                 _bracketCheck(isOccupancy),
                 pw.SizedBox(width: 4),
                 pw.Text('FSIC for Certificate for Occupancy', style: const pw.TextStyle(fontSize: textBase)),
               ]),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(children: [
                 pw.Text('4. ', style: const pw.TextStyle(fontSize: textBase)),
                 _bracketCheck(isBusinessPermit && !isConstruction && !isPeza && !isOccupancy && !isVerification && !isOthers),
                 pw.SizedBox(width: 4),
                 pw.Text('FSIC for Business Permit (New/Renewal)', style: const pw.TextStyle(fontSize: textBase)),
               ]),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -634,7 +634,7 @@ class InspectionChecklistPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text('Verification Inspection for Compliance:', style: const pw.TextStyle(fontSize: textBase)),
-                        pw.SizedBox(height: 2),
+                        pw.SizedBox(height: 4),
                         pw.Row(
                           children: [
                             pw.SizedBox(width: 14),
@@ -653,7 +653,7 @@ class InspectionChecklistPdfService {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(
                 children: [
                   pw.Text('6. Others (Specify) : ', style: const pw.TextStyle(fontSize: textBase)),
@@ -674,7 +674,7 @@ class InspectionChecklistPdfService {
             ],
           ),
         ),
-        pw.SizedBox(height: 6),
+        pw.SizedBox(height: 14),
 
         // III. REQUIREMENTS
         _sectionTitle('III.      REQUIREMENTS'),
@@ -690,7 +690,7 @@ class InspectionChecklistPdfService {
                 pw.Text('FSIC for Occupancy:', style: const pw.TextStyle(fontSize: textBase)),
               ]),
               pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 18, top: 1.5, bottom: 1.5),
+                padding: const pw.EdgeInsets.only(left: 18, top: 3.5, bottom: 3.5),
                 child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -700,7 +700,7 @@ class InspectionChecklistPdfService {
                         children: [
                           pw.Text('-  Fire Safety Compliance and Commissioning Report (FSCCR)', style: const pw.TextStyle(fontSize: textBase)),
                           pw.Padding(
-                            padding: const pw.EdgeInsets.only(left: 12),
+                            padding: const pw.EdgeInsets.only(left: 12, top: 1),
                             child: pw.Text('(if applicable)', style: const pw.TextStyle(fontSize: textSm)),
                           ),
                         ],
@@ -718,7 +718,7 @@ class InspectionChecklistPdfService {
                   ],
                 ),
               ),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 5),
               pw.Row(children: [
                 pw.Text('2. ', style: const pw.TextStyle(fontSize: textBase)),
                 _bracketCheck(isRenewalReq),
@@ -726,7 +726,7 @@ class InspectionChecklistPdfService {
                 pw.Text('FSIC for New / Renewal / Annual Inspection / Others:', style: const pw.TextStyle(fontSize: textBase)),
               ]),
               pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 18, top: 1.5, bottom: 1.5),
+                padding: const pw.EdgeInsets.only(left: 18, top: 3.5, bottom: 3.5),
                 child: pw.Row(
                   children: [
                     pw.Expanded(
@@ -747,17 +747,17 @@ class InspectionChecklistPdfService {
             ],
           ),
         ),
-        pw.SizedBox(height: 6),
+        pw.SizedBox(height: 14),
 
         // IV. GENERAL INFORMATION
         _sectionTitle('IV.      GENERAL INFORMATION'),
-        _underlineRow('Name of Building', model.buildingName, labelWidth: 175),
-        _underlineRow('Address', model.address, labelWidth: 175),
-        _underlineRow('Business Name', model.businessName, labelWidth: 175),
-        _underlineRow('Nature of Business', model.natureOfBusiness, labelWidth: 175),
-        _underlineRow('Name of owner/Representative', model.ownerRepresentative, labelWidth: 175),
-        _underlineRow('Contact No.', model.contactNo, labelWidth: 175),
-        pw.SizedBox(height: 3),
+        _underlineRow('Name of Building', model.buildingName, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Address', model.address, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Business Name', model.businessName, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Nature of Business', model.natureOfBusiness, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Name of owner/Representative', model.ownerRepresentative, labelWidth: 195, verticalPadding: 4.5),
+        _underlineRow('Contact No.', model.contactNo, labelWidth: 195, verticalPadding: 4.5),
+        pw.SizedBox(height: 6),
 
         pw.Row(children: [
           _bracketCheck(isOccupancy || (model.fsecNo.trim().isNotEmpty && model.fsecNo.trim().toUpperCase() != 'N/A')),
@@ -765,38 +765,38 @@ class InspectionChecklistPdfService {
           pw.Text('FSIC for Occupancy:', style: const pw.TextStyle(fontSize: textBase)),
         ]),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 2),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- FSEC No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- FSEC No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsecNo, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsecNo, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fsecNo.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsecDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsecDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fsecDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 2),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Building Permit', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Building Permit', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.buildingPermitNo, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.buildingPermitNo, style: pw.TextStyle(fontSize: textBase, fontWeight: model.buildingPermitNo.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.buildingPermitDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.buildingPermitDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.buildingPermitDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 5),
 
         pw.Row(children: [
           _bracketCheck(isBusinessPermit || isPeza || (model.fsicNoLatest.trim().isNotEmpty && model.fsicNoLatest.trim().toUpperCase() != 'N/A')),
@@ -804,71 +804,71 @@ class InspectionChecklistPdfService {
           pw.Text('FSIC for New / Renewal / Annual Inspection / Others:', style: const pw.TextStyle(fontSize: textBase)),
         ]),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 1),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- FSIC No. (Latest)', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- FSIC No. (Latest)', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsicNoLatest, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsicNoLatest, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fsicNoLatest.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsicDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fsicDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fsicDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 1),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Certificate of Fire Drill', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Certificate of Fire Drill', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireDrillCertNo, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireDrillCertNo, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fireDrillCertNo.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireDrillDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireDrillDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fireDrillDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 1),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Business Permit No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Business Permit No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.businessPermitNo, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.businessPermitNo, style: pw.TextStyle(fontSize: textBase, fontWeight: model.businessPermitNo.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.businessPermitDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.businessPermitDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.businessPermitDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 14, top: 1, bottom: 1),
+          padding: const pw.EdgeInsets.only(left: 14, top: 3.5, bottom: 3.5),
           child: pw.Row(
             children: [
-              pw.SizedBox(width: 135, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Fire Insurance Policy No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
+              pw.SizedBox(width: 140, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('- Fire Insurance Policy No.', style: const pw.TextStyle(fontSize: textBase)), pw.Text(':', style: const pw.TextStyle(fontSize: textBase))])),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireInsurancePolicyNo, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireInsurancePolicyNo, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fireInsurancePolicyNo.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
               pw.SizedBox(width: 12),
               pw.Text('/ Date Issued', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
               pw.Text(':', style: const pw.TextStyle(fontSize: textBase)),
               pw.SizedBox(width: 4),
-              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireInsuranceDateIssued, style: const pw.TextStyle(fontSize: textBase)))),
+              pw.Expanded(flex: 3, child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.fireInsuranceDateIssued, style: pw.TextStyle(fontSize: textBase, fontWeight: model.fireInsuranceDateIssued.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)))),
             ],
           ),
         ),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 24),
+          padding: const pw.EdgeInsets.only(left: 24, top: 2),
           child: pw.Text('(If any)', style: const pw.TextStyle(fontSize: textSm)),
         ),
 
@@ -923,55 +923,55 @@ class InspectionChecklistPdfService {
 
         // CONSTRUCTION TYPE
         _sectionTitle('CONSTRUCTION TYPE'),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(children: [_bracketCheck(isTypeI), pw.SizedBox(width: 4), pw.Text('Type I : Concrete & Steel (Fire Resistive)', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isTypeII), pw.SizedBox(width: 4), pw.Text('Type II : Concrete & Exposed Steel (Noncombustible)', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isTypeIII), pw.SizedBox(width: 4), pw.Text('Type III : Concrete & Wood (Ordinary)', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isTypeIV), pw.SizedBox(width: 4), pw.Text('Type IV : Heavy Timber (Large mass wood)', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isTypeV), pw.SizedBox(width: 4), pw.Text('Type V : Wood frame (Lightweight wood)', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 14),
 
         // WALLS / CEILING INTERIOR FINISH
         _sectionTitle('WALLS / CEILING INTERIOR FINISH'),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(children: [_bracketCheck(isClassA), pw.SizedBox(width: 4), pw.Text('Class A : Flame spread index, 0-25;smoke developed index, 0-450', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isClassB), pw.SizedBox(width: 4), pw.Text('Class B : Flame spread index, 26-75; smoke developed index, 0-450', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isClassC), pw.SizedBox(width: 4), pw.Text('Class C : Flame spread index, 76-200; smoke developed index, 0-450', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 14),
 
         // FLOOR INTERIOR FINISH
         _sectionTitle('FLOOR INTERIOR FINISH'),
-        pw.SizedBox(height: 2),
-        pw.Row(children: [_bracketCheck(isFloorClassI), pw.SizedBox(width: 4), pw.Text('Class I : Critical radiant flux, not less than 0.45 W/cm2.', style: const pw.TextStyle(fontSize: textBase))]),
         pw.SizedBox(height: 3),
+        pw.Row(children: [_bracketCheck(isFloorClassI), pw.SizedBox(width: 4), pw.Text('Class I : Critical radiant flux, not less than 0.45 W/cm2.', style: const pw.TextStyle(fontSize: textBase))]),
+        pw.SizedBox(height: 5),
         pw.Row(children: [_bracketCheck(isFloorClassII), pw.SizedBox(width: 4), pw.Text('Class II : Critical radiant flux, not more than 0.22 W/cm2, but less than 0.45W/cm2', style: const pw.TextStyle(fontSize: textBase))]),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Text('(Note: Flame Spread Index can be seen in the technical specification of the product)', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 14),
 
         // SECTIONAL OCCUPANCY
         _sectionTitle('SECTIONAL OCCUPANCY (INDICATE SPECIFIC USAGE OF EACH FLOOR, PART OR PORTION OF THE BUILDING)'),
-        _underlineRow('Basement', model.basementUsage, labelWidth: 90),
-        _underlineRow('Ground floor', model.groundFloorUsage, labelWidth: 90),
-        _underlineRow('Second floor', model.secondFloorUsage, labelWidth: 90),
-        _underlineRow('Third floor', model.thirdFloorUsage, labelWidth: 90),
-        _underlineRow('Fourth Floor', model.fourthFloorUsage, labelWidth: 90),
-        _underlineRow('Nth Floor', model.nthFloorUsage, labelWidth: 90),
-        pw.SizedBox(height: 2),
+        _underlineRow('Basement', model.basementUsage, labelWidth: 105, verticalPadding: 4.0),
+        _underlineRow('Ground floor', model.groundFloorUsage, labelWidth: 105, verticalPadding: 4.0),
+        _underlineRow('Second floor', model.secondFloorUsage, labelWidth: 105, verticalPadding: 4.0),
+        _underlineRow('Third floor', model.thirdFloorUsage, labelWidth: 105, verticalPadding: 4.0),
+        _underlineRow('Fourth Floor', model.fourthFloorUsage, labelWidth: 105, verticalPadding: 4.0),
+        _underlineRow('Nth Floor', model.nthFloorUsage, labelWidth: 105, verticalPadding: 4.0),
+        pw.SizedBox(height: 3),
         pw.Text('Use separate sheet if necessary', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 14),
 
         // GENERAL OCCUPANCY CLASSIFICATION
         _sectionTitle('GENERAL OCCUPANCY CLASSIFICATION'),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(
           children: [
             _bracketCheck(isAssembly),
@@ -984,7 +984,7 @@ class InspectionChecklistPdfService {
             pw.Text(' Health Care', style: const pw.TextStyle(fontSize: textBase)),
           ],
         ),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(
           children: [
             _bracketCheck(isDetention),
@@ -995,7 +995,7 @@ class InspectionChecklistPdfService {
             pw.Text(' Residential Board and Care', style: const pw.TextStyle(fontSize: textBase)),
           ],
         ),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 5),
         pw.Row(
           children: [
             _bracketCheck(isMercantile),
@@ -1010,38 +1010,38 @@ class InspectionChecklistPdfService {
             pw.Text(' Special Structure.', style: const pw.TextStyle(fontSize: textBase)),
           ],
         ),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 14),
 
         // OTHER INFORMATION
         _sectionTitle('OTHER INFORMATION'),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(
           children: [
             pw.Text('Maximum Occupant Load: ', style: const pw.TextStyle(fontSize: textBase)),
             pw.Container(
-              width: 100,
+              width: 105,
               decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
-              child: pw.Text(model.occupantLoad, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
+              child: pw.Text(model.occupantLoad, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: model.occupantLoad.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)),
             ),
             pw.Text(' P/Floor', style: const pw.TextStyle(fontSize: textBase)),
             pw.SizedBox(width: 24),
             pw.Text('Number of Stories: ', style: const pw.TextStyle(fontSize: textBase)),
             pw.Container(
-              width: 100,
+              width: 105,
               decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
-              child: pw.Text(model.numberOfStories, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
+              child: pw.Text(model.numberOfStories, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: model.numberOfStories.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)),
             ),
             pw.Text(' Storey', style: const pw.TextStyle(fontSize: textBase)),
           ],
         ),
-        pw.SizedBox(height: 4),
+        pw.SizedBox(height: 6),
         pw.Row(
           children: [
             pw.Text('Building Height          : ', style: const pw.TextStyle(fontSize: textBase)),
             pw.Container(
-              width: 100,
+              width: 105,
               decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
-              child: pw.Text(model.buildingHeight, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
+              child: pw.Text(model.buildingHeight, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: model.buildingHeight.isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal)),
             ),
             pw.Text(' m', style: const pw.TextStyle(fontSize: textBase)),
             pw.SizedBox(width: 32),
@@ -1089,12 +1089,12 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         _sectionTitle('V.        MEANS OF EGRESS'),
         _sectionTitle('A.       EXIT ACCESS'),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 8, bottom: 6),
+          padding: const pw.EdgeInsets.only(left: 8, bottom: 8),
           child: pw.Text('[   ] Doors / [   ] Corridors / [   ] Hallways / [   ] Passageways / [   ] Anterooms / [   ] Ramps', style: const pw.TextStyle(fontSize: textBase)),
         ),
 
@@ -1118,7 +1118,7 @@ class InspectionChecklistPdfService {
           final remark = _getRemark(model.itemRemarks, item);
 
           return pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+            padding: const pw.EdgeInsets.only(left: 8, bottom: 3.5),
             child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
@@ -1156,7 +1156,7 @@ class InspectionChecklistPdfService {
           );
         }),
 
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         // Bordered Table
         pw.Table(
@@ -1170,10 +1170,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...tableCriteria.map((item) {
@@ -1184,10 +1184,10 @@ class InspectionChecklistPdfService {
 
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
                   pw.Container(
                     alignment: pw.Alignment.center,
-                    padding: const pw.EdgeInsets.all(3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                     child: hasDim
                         ? pw.Container(
                             width: 50,
@@ -1196,15 +1196,15 @@ class InspectionChecklistPdfService {
                           )
                         : pw.SizedBox(),
                   ),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
                 ],
               );
             }),
           ],
         ),
 
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         // B. EXITS
         _sectionTitle('B.       EXITS'),
@@ -1214,11 +1214,11 @@ class InspectionChecklistPdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text('[   ] Normal Stairs /  [   ] Curved Stairs /  [   ] Spiral Stairs /  [   ] Winding Stairs', style: const pw.TextStyle(fontSize: textBase)),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 4),
               pw.Text('[   ] Horizontal Exits /  [   ] Outside Stairs / Exit Passageways / Fire Escape Stairs', style: const pw.TextStyle(fontSize: textBase)),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 4),
               pw.Text('[   ] Fire Escape Ladder (for 1 & 2 family dwelling only)', style: const pw.TextStyle(fontSize: textBase)),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 4),
               pw.Text('[   ] Slide Escape (for Industrial Occupancy Only)', style: const pw.TextStyle(fontSize: textBase)),
             ],
           ),
@@ -1269,7 +1269,7 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // Unbordered Aligned Components List
         pw.Padding(
@@ -1291,7 +1291,7 @@ class InspectionChecklistPdfService {
           final remark = _getRemark(model.itemRemarks, item);
 
           return pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+            padding: const pw.EdgeInsets.only(left: 8, bottom: 2.5),
             child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
@@ -1343,10 +1343,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...tableCriteria.map((item) {
@@ -1357,10 +1357,10 @@ class InspectionChecklistPdfService {
 
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
                   pw.Container(
                     alignment: pw.Alignment.center,
-                    padding: const pw.EdgeInsets.all(3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0),
                     child: hasDim
                         ? pw.Container(
                             width: 50,
@@ -1369,8 +1369,8 @@ class InspectionChecklistPdfService {
                           )
                         : pw.SizedBox(),
                   ),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: _bracketCheck(isFail)),
                 ],
               );
             }),
@@ -1424,7 +1424,7 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // C. EXITS DISCHARGE
         _sectionTitle('C.       EXITS DISCHARGE'),
@@ -1439,10 +1439,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...exitDischargeCriteria.map((item) {
@@ -1453,10 +1453,10 @@ class InspectionChecklistPdfService {
 
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
                   pw.Container(
                     alignment: pw.Alignment.center,
-                    padding: const pw.EdgeInsets.all(3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                     child: hasDim
                         ? pw.Container(
                             width: 50,
@@ -1465,15 +1465,15 @@ class InspectionChecklistPdfService {
                           )
                         : pw.SizedBox(),
                   ),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
                 ],
               );
             }),
           ],
         ),
 
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // VI. SIGNS, LIGHTING, AND EXITS SIGNAGE
         _sectionTitle('VI.      SIGNS, LIGHTING, AND EXITS SIGNAGE'),
@@ -1489,10 +1489,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...egressMarkingCriteria.map((item) {
@@ -1503,10 +1503,10 @@ class InspectionChecklistPdfService {
 
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
                   pw.Container(
                     alignment: pw.Alignment.center,
-                    padding: const pw.EdgeInsets.all(3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                     child: hasDim
                         ? pw.Container(
                             width: 50,
@@ -1515,15 +1515,15 @@ class InspectionChecklistPdfService {
                           )
                         : pw.SizedBox(),
                   ),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
                 ],
               );
             }),
           ],
         ),
 
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // B. MARKING OF MEANS OF EGRESS (EMERGENCY EVACUATION PLAN)
         _sectionTitle('B.       MARKING OF MEANS OF EGRESS (EMERGENCY EVACUATION PLAN)'),
@@ -1537,9 +1537,9 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...evacuationPlanCriteria.map((item) {
@@ -1547,16 +1547,16 @@ class InspectionChecklistPdfService {
               final isFail = _isFailed(model.exitSignageStatus, item);
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
                 ],
               );
             }),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1569,8 +1569,8 @@ class InspectionChecklistPdfService {
                     ],
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Containing the following basic information below'))),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Containing the following basic information below'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Containing the following basic information below'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Containing the following basic information below'))),
               ],
             ),
           ],
@@ -1603,7 +1603,7 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // Emergency Evacuation Plan Table (Continuation)
         pw.Table(
@@ -1617,16 +1617,16 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Emergency Evacuation Plan:', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Emergency Evacuation Plan:', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Actual\nDim.', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1637,21 +1637,21 @@ class InspectionChecklistPdfService {
                 ),
                 pw.Container(
                   alignment: pw.Alignment.center,
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Container(
                     width: 50,
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                     child: pw.Text(_getDimension(model.itemDimensions, '330.2'), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPassedP1)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFailedP1)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPassedP1)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFailedP1)),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1666,21 +1666,21 @@ class InspectionChecklistPdfService {
                 ),
                 pw.Container(
                   alignment: pw.Alignment.center,
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Container(
                     width: 50,
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                     child: pw.Text(_getDimension(model.itemDimensions, '50-150'), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPassedP2)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFailedP2)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPassedP2)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFailedP2)),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1693,15 +1693,15 @@ class InspectionChecklistPdfService {
                 ),
                 pw.Container(
                   alignment: pw.Alignment.center,
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Container(
                     width: 50,
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                     child: pw.Text(_getDimension(model.itemDimensions, '151'), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPassedP3)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFailedP3)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPassedP3)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFailedP3)),
               ],
             ),
             pw.TableRow(
@@ -1736,10 +1736,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Actual\nLux/Time', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Actual\nLux/Time', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             ...illuminationCriteria.map((item) {
@@ -1749,24 +1749,24 @@ class InspectionChecklistPdfService {
 
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
                   pw.Container(
                     alignment: pw.Alignment.center,
-                    padding: const pw.EdgeInsets.all(3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                     child: pw.Container(
                       width: 50,
                       decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                       child: pw.Text(dim, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                     ),
                   ),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+                  pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
                 ],
               );
             }),
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Emergency Lighting', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Emergency Lighting', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
                 pw.Container(),
                 pw.Container(),
                 pw.Container(),
@@ -1775,50 +1775,50 @@ class InspectionChecklistPdfService {
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Text('[   ] Illumination not less than an average of 1 ft-candle (10.8 lux) and, at any point, not less than 0.1 ft-candle (1.1 lux), measured along the path of egress at floor level.', style: const pw.TextStyle(fontSize: textBase)),
                 ),
                 pw.Container(
                   alignment: pw.Alignment.center,
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Container(
                     width: 50,
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                     child: pw.Text(_getDimension(model.itemDimensions, 'Emergency lighting average'), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Emergency lighting average'))),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Emergency lighting average'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Emergency lighting average'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Emergency lighting average'))),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Text('[   ] Emergency lighting system shall be arranged to provide the required illumination automatically in the event of any interruption of normal lighting (e.g. Failure of a public utility, ect..) for a period at least 1.5-hour.', style: const pw.TextStyle(fontSize: textBase)),
                 ),
                 pw.Container(
                   alignment: pw.Alignment.center,
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Container(
                     width: 50,
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))),
                     child: pw.Text(_getDimension(model.itemDimensions, 'auto-activates'), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: textBase)),
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'auto-activates'))),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'auto-activates'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'auto-activates'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'auto-activates'))),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Text('[   ] Periodic Testing of Emergency Lighting Equipment (Written record)', style: const pw.TextStyle(fontSize: textBase)),
                 ),
                 pw.Container(),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Periodic Testing of Emergency Lighting Equipment (Written record)'))),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Periodic Testing of Emergency Lighting Equipment (Written record)'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isPassed(model.exitSignageStatus, 'Periodic Testing of Emergency Lighting Equipment (Written record)'))),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(_isFailed(model.exitSignageStatus, 'Periodic Testing of Emergency Lighting Equipment (Written record)'))),
               ],
             ),
           ],
@@ -1863,26 +1863,26 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         _sectionTitle('VII.     HAZARD'),
-        pw.SizedBox(height: 4),
+        pw.SizedBox(height: 6),
 
         // 2-column underlined fields
         pw.Row(
           children: [
             pw.Text('Hazard Contents            : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardContents, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardContents, style: const pw.TextStyle(fontSize: textBase)))),
             pw.SizedBox(width: 14),
             pw.Text('Quantity (Vol. / Weight) : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardQuantity, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardQuantity, style: const pw.TextStyle(fontSize: textBase)))),
           ],
         ),
-        pw.SizedBox(height: 4),
+        pw.SizedBox(height: 5),
         pw.Row(
           children: [
             pw.Text('Hazard Identification     : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardPlacard, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardPlacard, style: const pw.TextStyle(fontSize: textBase)))),
             pw.SizedBox(width: 14),
             pw.Text('Within MAQ                     : ', style: const pw.TextStyle(fontSize: textBase)),
             _bracketCheck(isMaqYes),
@@ -1896,11 +1896,11 @@ class InspectionChecklistPdfService {
           padding: const pw.EdgeInsets.only(left: 4),
           child: pw.Text('Placard', style: const pw.TextStyle(fontSize: textSm)),
         ),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(
           children: [
             pw.Text('Hazard                           : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardIdentificationNo, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardIdentificationNo, style: const pw.TextStyle(fontSize: textBase)))),
             pw.SizedBox(width: 14),
             pw.Text('Hazard Classification: ', style: const pw.TextStyle(fontSize: textBase)),
             _bracketCheck(isLow),
@@ -1915,37 +1915,40 @@ class InspectionChecklistPdfService {
           padding: const pw.EdgeInsets.only(left: 4),
           child: pw.Text('Identification No.', style: const pw.TextStyle(fontSize: textSm)),
         ),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 3),
         pw.Row(
           children: [
             pw.Text('Class                               : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardClass, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.hazardClass, style: const pw.TextStyle(fontSize: textBase)))),
             pw.SizedBox(width: 14),
             pw.Text('Flash Point                      : ', style: const pw.TextStyle(fontSize: textBase)),
-            pw.Expanded(child: pw.Container(decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.flashPoint, style: const pw.TextStyle(fontSize: textBase)))),
+            pw.Expanded(child: pw.Container(padding: const pw.EdgeInsets.only(bottom: 1.5), decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.Text(model.flashPoint, style: const pw.TextStyle(fontSize: textBase)))),
           ],
         ),
 
-        pw.SizedBox(height: 6),
-        pw.Text('Low hazard contents shall be classified as those of such low combustibility that no self-propagating fire therein can occur.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
-        pw.SizedBox(height: 2),
-        pw.Text('Ordinary hazard contents shall be classified as those that are likely to burn with moderate rapidity or to give off a considerable volume of smoke.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
-        pw.SizedBox(height: 2),
-        pw.Text('High hazard contents shall be classified as those that are likely to burn with extreme rapidity or from which explosions are likely.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
         pw.SizedBox(height: 8),
+        pw.Text('Low hazard contents shall be classified as those of such low combustibility that no self-propagating fire therein can occur.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
+        pw.SizedBox(height: 3),
+        pw.Text('Ordinary hazard contents shall be classified as those that are likely to burn with moderate rapidity or to give off a considerable volume of smoke.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
+        pw.SizedBox(height: 3),
+        pw.Text('High hazard contents shall be classified as those that are likely to burn with extreme rapidity or from which explosions are likely.', style: pw.TextStyle(fontSize: textSm, fontStyle: pw.FontStyle.italic)),
+        pw.SizedBox(height: 12),
 
         // A. OTHER FLAMMABLE LIQUIDS
         _sectionTitle('A.       OTHER FLAMMABLE LIQUIDS (I.E. ALCOHOL, ETHER, ETC...)'),
+        pw.SizedBox(height: 4),
         _buildSimpleCheckTable(flammableLiquidsCriteria, model.fireProtectionStatus),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 12),
 
         // B. MISCELLANEOUS HAZARDS
         _sectionTitle('B.       MISCELLANEOUS HAZARDS (MECHANICAL EQUIPMENT ROOM, STORAGE, SUPPLY ROOM)'),
+        pw.SizedBox(height: 4),
         _buildSimpleCheckTable(miscHazardsCriteria, model.fireProtectionStatus),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 12),
 
         // C. HOUSEKEEPING, MAINTENANCE, STORAGE & WASTE DISPOSAL
         _sectionTitle('C.       HOUSEKEEPING, MAINTENANCE, STORAGE & WASTE DISPOSAL'),
+        pw.SizedBox(height: 4),
         _buildSimpleCheckTable(housekeepingCriteria, model.fireProtectionStatus),
 
         pw.Spacer(),
@@ -1965,9 +1968,9 @@ class InspectionChecklistPdfService {
       children: [
         pw.TableRow(
           children: [
-            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-            pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+            pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+            pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+            pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
           ],
         ),
         ...items.map((item) {
@@ -1975,9 +1978,9 @@ class InspectionChecklistPdfService {
           final isFail = _isFailed(statusMap, item);
           return pw.TableRow(
             children: [
-              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
-              pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPass)),
-              pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFail)),
+              pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+              pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isPass)),
+              pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(isFail)),
             ],
           );
         }),
@@ -1993,9 +1996,10 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         _sectionTitle('VIII.    FIRE PROTECTION'),
+        pw.SizedBox(height: 4),
 
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
@@ -2008,10 +2012,10 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Item to Inspect', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Procedure How to Inspect', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Item to Inspect', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Procedure How to Inspect', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.0), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
 
@@ -2076,7 +2080,7 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         // Section VIII Table Continuation
         pw.Table(
@@ -2109,10 +2113,11 @@ class InspectionChecklistPdfService {
           ],
         ),
 
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 14),
 
         // J. BUILDING SERVICE EQUIPMENT
         _sectionTitle('J.        BUILDING SERVICE EQUIPMENT'),
+        pw.SizedBox(height: 6),
 
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
@@ -2124,15 +2129,15 @@ class InspectionChecklistPdfService {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('', style: const pw.TextStyle(fontSize: textBase))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Passed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Failed', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -2144,14 +2149,14 @@ class InspectionChecklistPdfService {
                     ],
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse1Pass)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse1Fail)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse1Pass)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse1Fail)),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -2163,14 +2168,14 @@ class InspectionChecklistPdfService {
                     ],
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse2Pass)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse2Fail)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse2Pass)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse2Fail)),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -2185,14 +2190,14 @@ class InspectionChecklistPdfService {
                     ],
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse3Pass)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse3Fail)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse3Pass)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse3Fail)),
               ],
             ),
             pw.TableRow(
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -2204,8 +2209,8 @@ class InspectionChecklistPdfService {
                     ],
                   ),
                 ),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse4Pass)),
-                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(bse4Fail)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse4Pass)),
+                pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: _bracketCheck(bse4Fail)),
               ],
             ),
           ],
@@ -2249,7 +2254,7 @@ class InspectionChecklistPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _header(dilg, bfp, stationName),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         // K. FIRE WALL (FW) (if required)
         pw.Row(
@@ -2266,16 +2271,16 @@ class InspectionChecklistPdfService {
                 children: [
                   pw.TableRow(
                     children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('FIRE WALL (FW) (if required)', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
+                      pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('FIRE WALL (FW) (if required)', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold))),
                       pw.Container(),
                     ],
                   ),
                   pw.TableRow(
                     children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text('Provided with Fire Wall (minimum 2 hours fire resistance)', style: const pw.TextStyle(fontSize: textBase))),
+                      pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5), child: pw.Text('Provided with Fire Wall (minimum 2 hours fire resistance)', style: const pw.TextStyle(fontSize: textBase))),
                       pw.Container(
                         alignment: pw.Alignment.center,
-                        padding: const pw.EdgeInsets.all(3),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                         child: pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.center,
                           children: [
@@ -2291,7 +2296,7 @@ class InspectionChecklistPdfService {
                   pw.TableRow(
                     children: [
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(3),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
@@ -2302,7 +2307,7 @@ class InspectionChecklistPdfService {
                       ),
                       pw.Container(
                         alignment: pw.Alignment.center,
-                        padding: const pw.EdgeInsets.all(3),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                         child: pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.center,
                           children: [
@@ -2318,7 +2323,7 @@ class InspectionChecklistPdfService {
                   pw.TableRow(
                     children: [
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(3),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                         child: pw.Row(
                           children: [
                             pw.Text('Wall type: ', style: const pw.TextStyle(fontSize: textBase)),
@@ -2344,7 +2349,7 @@ class InspectionChecklistPdfService {
 
         // DEFECTS / DEFICIENCIES
         pw.Text('DEFECTS/DEFICIENCIES', style: pw.TextStyle(fontSize: textHeading, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 3),
+        pw.SizedBox(height: 4),
 
         _buildDefectUnderlineRow('ITEM IV:', defectsIV[0]),
         _buildDefectUnderlineRow('ITEM V:', defectsV[0]),
@@ -2355,10 +2360,11 @@ class InspectionChecklistPdfService {
         _buildDefectUnderlineRow('ITEM VIII:', defectsVIII[0]),
         _buildDefectUnderlineRow('', defectsVIII.length > 1 ? defectsVIII[1] : ''),
 
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
         // IX. RECOMMENDATIONS
         _sectionTitle('IX.      RECOMMENDATIONS'),
+        pw.SizedBox(height: 4),
         pw.Padding(
           padding: const pw.EdgeInsets.only(left: 4),
           child: pw.Column(
@@ -2377,7 +2383,7 @@ class InspectionChecklistPdfService {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 3),
+              pw.SizedBox(height: 4),
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -2388,20 +2394,20 @@ class InspectionChecklistPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text('For issuance of', style: const pw.TextStyle(fontSize: textBase)),
-                        pw.SizedBox(height: 2),
+                        pw.SizedBox(height: 2.5),
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(left: 20),
                           child: pw.Column(
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Row(children: [_bracketCheck(isNtc), pw.SizedBox(width: 4), pw.Text('Notice to Comply', style: const pw.TextStyle(fontSize: textBase))]),
-                              pw.SizedBox(height: 1.5),
+                              pw.SizedBox(height: 2),
                               pw.Row(children: [_bracketCheck(isNtcv), pw.SizedBox(width: 4), pw.Text('Notice to Correct Violation', style: const pw.TextStyle(fontSize: textBase))]),
-                              pw.SizedBox(height: 1.5),
+                              pw.SizedBox(height: 2),
                               pw.Row(children: [_bracketCheck(isClosure && !rec.contains('NON-PAYMENT')), pw.SizedBox(width: 4), pw.Text('Closure Order', style: const pw.TextStyle(fontSize: textBase))]),
-                              pw.SizedBox(height: 1.5),
+                              pw.SizedBox(height: 2),
                               pw.Row(children: [_bracketCheck(isAbatement), pw.SizedBox(width: 4), pw.Text('Abatement Order with Administrative Fine', style: const pw.TextStyle(fontSize: textBase))]),
-                              pw.SizedBox(height: 1.5),
+                              pw.SizedBox(height: 2),
                               pw.Row(children: [_bracketCheck(rec.contains('NON-PAYMENT')), pw.SizedBox(width: 4), pw.Text('Closure Order for the non-payment of Administrative Fine', style: const pw.TextStyle(fontSize: textBase))]),
                             ],
                           ),
@@ -2415,11 +2421,11 @@ class InspectionChecklistPdfService {
           ),
         ),
 
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 12),
 
         // ACKNOWLEDGED BY
         pw.Text('ACKNOWLEDGED BY:', style: pw.TextStyle(fontSize: textBase, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 14),
+        pw.SizedBox(height: 16),
 
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -2480,7 +2486,7 @@ class InspectionChecklistPdfService {
           ],
         ),
 
-        pw.SizedBox(height: 6),
+        pw.SizedBox(height: 8),
         pw.Row(
           children: [
             pw.Text('Date & Time: ', style: const pw.TextStyle(fontSize: textBase)),
@@ -2560,7 +2566,7 @@ class InspectionChecklistPdfService {
 
   static pw.Widget _buildDefectUnderlineRow(String label, String value) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
+      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
@@ -2576,7 +2582,7 @@ class InspectionChecklistPdfService {
               decoration: const pw.BoxDecoration(
                 border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
               ),
-              padding: const pw.EdgeInsets.only(left: 4, bottom: 0.5),
+              padding: const pw.EdgeInsets.only(left: 4, bottom: 1.0),
               child: pw.Text(
                 value,
                 style: const pw.TextStyle(fontSize: textBase),
@@ -2650,10 +2656,10 @@ class InspectionChecklistPdfService {
   static pw.TableRow _tableRow4Col(String item, String procedure, bool isPassed, bool isFailed) {
     return pw.TableRow(
       children: [
-        pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
-        pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(procedure, style: const pw.TextStyle(fontSize: textSm))),
-        pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isPassed)),
-        pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.all(3), child: _bracketCheck(isFailed)),
+        pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2.8), child: pw.Text(item, style: const pw.TextStyle(fontSize: textBase))),
+        pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2.8), child: pw.Text(procedure, style: const pw.TextStyle(fontSize: textSm))),
+        pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2.8), child: _bracketCheck(isPassed)),
+        pw.Container(alignment: pw.Alignment.center, padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2.8), child: _bracketCheck(isFailed)),
       ],
     );
   }

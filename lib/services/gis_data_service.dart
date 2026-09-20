@@ -52,23 +52,56 @@ class BarangayRiskPolygon {
     this.h2hSummaryInterpretation,
   });
 
+  bool get isAssessed {
+    final r = riskLevel.toLowerCase().trim();
+    if (r == 'unassessed' || r == 'pending' || r == 'no data' || r == 'pending assessment' || r.isEmpty) {
+      return false;
+    }
+    return cfppStatus.toLowerCase().trim() == 'formulated';
+  }
+
+  String get riskBadgeLabel {
+    if (!isAssessed) {
+      return 'UNASSESSED';
+    }
+    return '${riskLevel.toUpperCase()} RISK';
+  }
+
   Color get riskColor {
-    switch (riskLevel.toLowerCase()) {
+    final r = riskLevel.toLowerCase().trim();
+    if (!isAssessed || r == 'unassessed' || r == 'pending' || r == 'no data' || r == 'pending assessment' || r.isEmpty) {
+      return const Color(0xFF94A3B8); // Slate Gray for Unassessed
+    }
+    switch (r) {
       case 'high':
         return const Color(0xFFDC2626); // Fire Red
       case 'medium':
+      case 'med':
+      case 'moderate':
         return const Color(0xFFD97706); // Warning Amber
       case 'low':
-      default:
         return const Color(0xFF16A34A); // Safe Green
+      default:
+        return const Color(0xFF94A3B8); // Slate Gray fallback
     }
   }
 
-  Color get riskFillColor => riskColor.withValues(alpha: 0.18);
-  Color get riskBorderColor => riskColor.withValues(alpha: 0.85);
+  Color get riskFillColor {
+    if (!isAssessed) {
+      return const Color(0xFF64748B).withValues(alpha: 0.10);
+    }
+    return riskColor.withValues(alpha: 0.18);
+  }
+
+  Color get riskBorderColor {
+    if (!isAssessed) {
+      return const Color(0xFF94A3B8).withValues(alpha: 0.70);
+    }
+    return riskColor.withValues(alpha: 0.85);
+  }
 
   Color get cfppStatusColor {
-    switch (cfppStatus.toLowerCase()) {
+    switch (cfppStatus.toLowerCase().trim()) {
       case 'formulated':
         return const Color(0xFF16A34A); // Green
       case 'in progress':
@@ -158,9 +191,11 @@ class GisDataService {
         if (bName.isEmpty) continue;
         final bKey = bName.toLowerCase();
         final sType = (s['survey_type'] ?? s['checklist_type'] ?? '').toString().toLowerCase().trim();
+        final sDataChecklistType = (s['survey_data'] is Map ? s['survey_data']['checklist_type'] : '').toString().toLowerCase().trim();
+        final isH2H = sType == 'house_to_house' || sType == 'h2h' || sDataChecklistType == 'house_to_house';
 
-        if (sType == 'house_to_house') {
-          // Accumulate H2H surveys for household stats
+        if (isH2H) {
+          // Accumulate H2H surveys for household stats ONLY
           h2hSurveysByBarangay.putIfAbsent(bKey, () => []).add(Map<String, dynamic>.from(s));
         } else {
           // CFPP assessment strictly drives barangay risk profile
@@ -190,7 +225,7 @@ class GisDataService {
       final lat = (dbB?['latitude'] as num?)?.toDouble() ?? defaultLat;
       final lng = (dbB?['longitude'] as num?)?.toDouble() ?? defaultLng;
       
-      String riskLevel = dbB?['risk_level']?.toString() ?? 'Low';
+      String riskLevel = dbB?['risk_level']?.toString() ?? 'Unassessed';
       double score = (dbB?['calculated_score'] as num?)?.toDouble() ?? 0.0;
       String cfppStatus = dbB?['cfpp_status']?.toString() ?? 'Pending Assessment';
       String lastAssessed = dbB?['last_assessed'] != null 
@@ -204,7 +239,7 @@ class GisDataService {
 
       // Dynamically override ONLY with live CFPP assessment if submitted
       if (survey != null) {
-        riskLevel = (survey['risk_level'] ?? riskLevel).toString().replaceAll(' Risk', '');
+        riskLevel = (survey['risk_level'] ?? 'Low').toString().replaceAll(' Risk', '').trim();
         final sc = survey['calculated_score'];
         if (sc != null) {
           score = sc is num ? sc.toDouble() : (double.tryParse(sc.toString()) ?? score);
@@ -221,6 +256,10 @@ class GisDataService {
         if (survey['electrical_hazards'] != null && survey['electrical_hazards'].toString().isNotEmpty) {
           predominantHazard = survey['electrical_hazards'].toString();
         }
+      } else if (cfppStatus.toLowerCase() != 'formulated') {
+        // If there is no live CFPP survey and DB does not have Formulated CFPP, strictly mark as Unassessed
+        riskLevel = 'Unassessed';
+        score = 0.0;
       }
 
       // Compute H2H summary metrics independently
