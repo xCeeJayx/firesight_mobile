@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
+import 'widgets/programs_activities_sheet.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -495,6 +496,96 @@ class _LoginScreenState extends State<LoginScreen> {
                                       padding: const EdgeInsets.all(8),
                                       decoration: const BoxDecoration(
                                         color: Color(0xFFEA580C),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.arrow_forward_rounded,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // BFP Programs & Activities Button Card
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ProgramsActivitiesSheet.show(context),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF), // Soft blue pill
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFF2563EB).withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.campaign_rounded,
+                                        color: Color(0xFF2563EB),
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Programs & Activities',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          SizedBox(height: 3),
+                                          Text(
+                                            'BFP Lingayen community fire safety campaigns, outreach, and news.',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF64748B),
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF2563EB),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
