@@ -58,6 +58,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     } else {
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushNotificationService().checkPendingNavigation();
+    });
   }
 
   void _setupRoleNavigation() {

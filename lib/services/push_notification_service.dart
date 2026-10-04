@@ -13,6 +13,7 @@ import '../models/emergency_report_model.dart';
 import '../models/user_role.dart';
 import '../screens/public/public_announcements_screen.dart';
 import '../widgets/emergency/emergency_alert_dialog.dart';
+import '../widgets/emergency/emergency_details_bottom_sheet.dart';
 import 'auth_service.dart';
 import 'emergency_service.dart';
 
@@ -138,6 +139,7 @@ class PushNotificationService {
   Stream<Map<String, dynamic>> get onNotificationReceived =>
       _onNotificationReceivedController.stream;
   String? _pendingInspectionId;
+  Map<String, dynamic>? _pendingNotificationPayload;
 
   /// Track recently handled alert keys to prevent duplicate popping within a short window
   final Set<String> _recentlyHandledKeys = {};
@@ -259,13 +261,31 @@ class PushNotificationService {
       // 7. Handle notification tap when app is in background
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('Notification clicked while app was in background: ${message.data}');
+        _pendingNotificationPayload = message.data;
         _handleNotificationData(message.data, isForeground: false);
       });
 
-      // 8. Check if app was opened from terminated state via notification click
+      // 8. Check if local notification launched app from terminated state
+      final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp ?? false) {
+        final payload = launchDetails?.notificationResponse?.payload;
+        if (payload != null && payload.isNotEmpty) {
+          try {
+            final Map<String, dynamic> data = jsonDecode(payload);
+            debugPrint('Local notification launched app from terminated state: $data');
+            _pendingNotificationPayload = data;
+            _handleNotificationData(data, isForeground: false);
+          } catch (e) {
+            debugPrint('Error decoding launch local notification payload: $e');
+          }
+        }
+      }
+
+      // 9. Check if FCM push notification launched app from terminated state
       final RemoteMessage? initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('Notification launched app from terminated state: ${initialMessage.data}');
+        _pendingNotificationPayload = initialMessage.data;
         _handleNotificationData(initialMessage.data, isForeground: false);
       }
     } catch (e) {
@@ -414,26 +434,50 @@ class PushNotificationService {
     );
   }
 
+  /// Safely executes navigation once Navigator is mounted. Retries up to 30 times (every 100ms) for cold starts.
+  void _executeWithNavigator(void Function(BuildContext context, NavigatorState nav) action) {
+    void attempt([int count = 0]) {
+      final nav = EmergencyService.navigatorKey.currentState;
+      final ctx = EmergencyService.navigatorKey.currentContext;
+
+      if (nav != null && ctx != null && ctx.mounted) {
+        try {
+          action(ctx, nav);
+          _pendingNotificationPayload = null;
+        } catch (e) {
+          debugPrint('Error executing notification navigation action: $e');
+        }
+      } else if (count < 30) {
+        Future.delayed(const Duration(milliseconds: 100), () => attempt(count + 1));
+      } else {
+        debugPrint('Navigator state not available after 30 attempts.');
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
+  }
+
   /// Route the user based on notification payload type
   void _handleNotificationData(Map<String, dynamic> data, {bool isForeground = false}) {
     if (data.isEmpty) return;
 
-    final String? type = data['type']?.toString();
+    final String? type = data['type']?.toString().toLowerCase();
     final String? announcementId = data['announcement_id']?.toString() ?? data['id']?.toString();
     final String? emergencyId = data['report_id']?.toString() ?? data['emergency_id']?.toString();
     final String? inspectionId = data['inspection_id']?.toString() ?? data['assignmentId']?.toString();
 
     // Determine unique deduplication key
     String? dedupeKey;
-    if (type == 'emergency' || emergencyId != null) {
+    if (type == 'emergency' || type == 'emergency_report' || type == 'emergency_update' || emergencyId != null) {
       dedupeKey = 'emergency_${emergencyId ?? data['id']}';
     } else if (type == 'announcement' || announcementId != null) {
       dedupeKey = 'announcement_${announcementId ?? data['title']}';
-    } else if (inspectionId != null) {
-      dedupeKey = 'inspection_$inspectionId';
+    } else if (inspectionId != null || type == 'inspection' || type == 'inspection_scheduled') {
+      dedupeKey = 'inspection_${inspectionId ?? data['order_no']}';
     }
 
-    if (dedupeKey != null) {
+    // Only deduplicate foreground auto-alerts; NEVER drop explicit user taps from the notification shade!
+    if (isForeground && dedupeKey != null) {
       if (_recentlyHandledKeys.contains(dedupeKey)) {
         debugPrint('Skipping duplicate alert presentation for key: $dedupeKey');
         return;
@@ -444,29 +488,36 @@ class PushNotificationService {
       });
     }
 
+    if (!isForeground) {
+      _pendingNotificationPayload = data;
+    }
+
     // 1. Handle Public Announcements
-    if (type == 'announcement' || announcementId != null) {
+    if (type == 'announcement' || (announcementId != null && announcementId.isNotEmpty && type != 'emergency')) {
       _handleAnnouncementData(data);
       return;
     }
 
     // 2. Handle Emergency Incidents
-    if (type == 'emergency' || emergencyId != null) {
-      _handleEmergencyData(data);
+    if (type == 'emergency' || type == 'emergency_report' || type == 'emergency_update' || emergencyId != null) {
+      _handleEmergencyData(data, isForeground: isForeground);
       return;
     }
 
     // 3. Handle Inspection Scheduling
-    if (inspectionId != null && inspectionId.isNotEmpty) {
-      if (isForeground) {
-        // While user is in the app, display an alert dialog with establishment details
-        _showInspectionAlertDialog(data, inspectionId);
-      } else {
-        // Tapped from background / notification shade: navigate directly
-        _pendingInspectionId = inspectionId;
-        _navigateToInspection(inspectionId);
+    if ((inspectionId != null && inspectionId.isNotEmpty) || type == 'inspection' || type == 'inspection_scheduled') {
+      final idToUse = inspectionId ?? data['id']?.toString();
+      if (idToUse != null && idToUse.isNotEmpty) {
+        if (isForeground) {
+          // While user is in the app, display an alert dialog with establishment details
+          _showInspectionAlertDialog(data, idToUse);
+        } else {
+          // Tapped from background / notification shade: navigate directly
+          _pendingInspectionId = idToUse;
+          _navigateToInspection(idToUse);
+        }
+        return;
       }
-      return;
     }
 
     debugPrint('No recognized entity id found in notification data: $data');
@@ -613,8 +664,8 @@ class PushNotificationService {
     }
   }
 
-  /// Handle emergency push notification tap: Fetch report and display EmergencyAlertDialog
-  Future<void> _handleEmergencyData(Map<String, dynamic> data) async {
+  /// Handle emergency push notification: Fetch report and display Emergency Details or Alert Dialog
+  Future<void> _handleEmergencyData(Map<String, dynamic> data, {bool isForeground = false}) async {
     final String? reportId = data['report_id']?.toString() ?? data['id']?.toString();
 
     EmergencyReportModel? report;
@@ -652,21 +703,29 @@ class PushNotificationService {
 
     if (report.id.isNotEmpty) {
       if (EmergencyService().isRecentlyAlerted(report.id)) {
-        debugPrint('Emergency report ${report.id} already alerted in-app. Skipping duplicate.');
-        return;
+        debugPrint('Emergency report ${report.id} already alerted in-app.');
+        if (isForeground) return;
       }
       EmergencyService().markAlerted(report.id);
     }
 
-    final title = report.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
+    final finalReport = report;
+    final title = finalReport.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentCtx = EmergencyService.navigatorKey.currentContext;
-      if (currentCtx != null) {
+    _executeWithNavigator((context, nav) {
+      if (isForeground) {
+        // In-app audible pop-up dialog with siren
         EmergencyAlertDialog.show(
-          currentCtx,
-          report!,
+          context,
+          finalReport,
           alertTitle: title,
+        );
+      } else {
+        // Direct tap from notification shade: Open full emergency details & responder actions directly
+        EmergencyDetailsBottomSheet.show(
+          context,
+          finalReport,
+          isPublicUser: AuthService().currentRole == UserRole.publicGuest,
         );
       }
     });
@@ -680,64 +739,40 @@ class PushNotificationService {
     final priority = data['priority']?.toString() ?? 'normal';
     final createdBy = data['created_by']?.toString() ?? 'BFP Lingayen';
 
-    final navContext = EmergencyService.navigatorKey.currentContext;
-    if (navContext != null) {
+    _executeWithNavigator((context, nav) {
       PublicAnnouncementsScreen.showAnnouncementModal(
-        context: navContext,
+        context: context,
         title: title,
         content: content,
         priority: priority,
         dateStr: 'Just now',
         createdBy: createdBy,
       );
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final delayedContext = EmergencyService.navigatorKey.currentContext;
-        if (delayedContext != null) {
-          PublicAnnouncementsScreen.showAnnouncementModal(
-            context: delayedContext,
-            title: title,
-            content: content,
-            priority: priority,
-            dateStr: 'Just now',
-            createdBy: createdBy,
-          );
-        }
-      });
-    }
+    });
   }
 
   /// Execute navigation to the specific ActiveInspectionScreen
   void _navigateToInspection(String inspectionId) {
-    final navState = EmergencyService.navigatorKey.currentState;
-    if (navState != null) {
+    _executeWithNavigator((context, nav) {
       _pendingInspectionId = null;
-      navState.push(
+      nav.push(
         MaterialPageRoute(
-          builder: (context) => ActiveInspectionScreen(assignmentId: inspectionId),
+          builder: (ctx) => ActiveInspectionScreen(assignmentId: inspectionId),
         ),
       );
-    } else {
-      // Defer navigation until MaterialApp navigator is mounted
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final delayedNav = EmergencyService.navigatorKey.currentState;
-        if (delayedNav != null && _pendingInspectionId != null) {
-          final idToOpen = _pendingInspectionId!;
-          _pendingInspectionId = null;
-          delayedNav.push(
-            MaterialPageRoute(
-              builder: (context) => ActiveInspectionScreen(assignmentId: idToOpen),
-            ),
-          );
-        }
-      });
-    }
+    });
   }
 
   /// Check for any pending notification navigation on app resume/mount
   void checkPendingNavigation() {
-    if (_pendingInspectionId != null) {
-      _navigateToInspection(_pendingInspectionId!);
+    if (_pendingNotificationPayload != null) {
+      final payload = Map<String, dynamic>.from(_pendingNotificationPayload!);
+      _pendingNotificationPayload = null;
+      _handleNotificationData(payload, isForeground: false);
+    } else if (_pendingInspectionId != null) {
+      final id = _pendingInspectionId!;
+      _pendingInspectionId = null;
+      _navigateToInspection(id);
     }
   }
 }

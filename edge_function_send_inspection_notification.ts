@@ -566,6 +566,7 @@ serve(async (req) => {
             body: notifBody,
           },
           data: {
+            type: "inspection_scheduled",
             inspection_id: String(inspectionId || ""),
             order_no: String(orderNo || ""),
             business_name: String(businessName || ""),
