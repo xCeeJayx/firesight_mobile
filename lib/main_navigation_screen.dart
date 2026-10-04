@@ -16,6 +16,7 @@ import 'screens/fire_inspector/fire_inspector_dashboard_screen.dart';
 import 'screens/fire_inspector/inspection_hub_screen.dart';
 import 'screens/fire_inspector/establishment_directory_screen.dart';
 import 'screens/fire_inspector/inspector_reports_screen.dart';
+import 'screens/public/public_announcements_screen.dart';
 import 'widgets/notifications_sheet.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -195,6 +196,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _stationBadge = 'Public Access Mode';
         _screens = const [
           FireRiskMappingScreen(isPublicUser: true),
+          PublicAnnouncementsScreen(),
           ReportEmergencyScreen(),
         ];
         _navigationDestinations = const [
@@ -202,6 +204,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map_rounded),
             label: 'GIS Risk Map',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign_rounded),
+            label: 'Announcements',
           ),
           NavigationDestination(
             icon: Icon(Icons.emergency_outlined),
@@ -321,7 +328,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
         actions: [
-          if (isGuest)
+          if (isGuest) ...[
+            IconButton(
+              icon: const Icon(Icons.campaign_outlined, color: Color(0xFFD84315), size: 24),
+              onPressed: () {
+                setState(() => _currentIndex = 1);
+              },
+              tooltip: 'BFP Public Announcements',
+            ),
             TextButton.icon(
               onPressed: _signOut,
               icon: const Icon(Icons.login_rounded, size: 18, color: Color(0xFFD84315)),
@@ -329,8 +343,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 'BFP Login',
                 style: TextStyle(color: Color(0xFFD84315), fontWeight: FontWeight.bold, fontSize: 13),
               ),
-            )
-          else ...[
+            ),
+          ] else ...[
             const NotificationBellButton(),
             IconButton(
               icon: const Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 22),

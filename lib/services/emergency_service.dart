@@ -201,10 +201,34 @@ class EmergencyService {
       // Local optimistic update
       final currentList = List<EmergencyReportModel>.from(reportsNotifier.value);
       final index = currentList.indexWhere((r) => r.id == id);
+      EmergencyReportModel? updatedReport;
       if (index != -1) {
-        currentList[index] = currentList[index].copyWith(status: newStatus);
+        updatedReport = currentList[index].copyWith(status: newStatus);
+        currentList[index] = updatedReport;
         reportsNotifier.value = currentList;
       }
+
+      // Dispatch push notification update (public receives if verified/responding, officers always)
+      try {
+        _client.functions.invoke('send-inspection-notification', body: {
+          'action': 'emergency',
+          'id': id,
+          'incident_type': updatedReport?.incidentType ?? 'Emergency Incident',
+          'barangay': updatedReport?.barangay ?? 'Lingayen',
+          'address': updatedReport?.address ?? '',
+          'status': newStatus,
+          'description': updatedReport?.description ?? '',
+          'photo_url': updatedReport?.photoUrl ?? '',
+          'latitude': updatedReport?.latitude,
+          'longitude': updatedReport?.longitude,
+        }).catchError((err) {
+          debugPrint('Notice: Error dispatching status update push notification: $err');
+          return FunctionResponse(data: null, status: 500);
+        });
+      } catch (invokeErr) {
+        debugPrint('Emergency update push invoke exception: $invokeErr');
+      }
+
       return true;
     } catch (e) {
       debugPrint('Error updating report status in Supabase: $e');

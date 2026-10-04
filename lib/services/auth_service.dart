@@ -49,6 +49,7 @@ class AuthService extends ChangeNotifier {
           _currentRole = UserRole.publicGuest;
           _userProfile = null;
           await PushNotificationService().clearTokenOnLogout();
+          await PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
           await _clearCachedSession();
           notifyListeners();
         }
@@ -57,6 +58,9 @@ class AuthService extends ChangeNotifier {
           event == AuthChangeEvent.initialSession) {
         await refreshUserProfile();
         await PushNotificationService().syncTokenToSupabase();
+        await PushNotificationService().updateOfficerTopicSubscription(
+          isOfficer: _currentRole != UserRole.publicGuest,
+        );
       }
     });
   }
@@ -79,6 +83,7 @@ class AuthService extends ChangeNotifier {
       if (_client?.auth.currentUser != null) {
         await refreshUserProfile();
       } else if (_currentRole != UserRole.publicGuest) {
+        PushNotificationService().updateOfficerTopicSubscription(isOfficer: true);
         notifyListeners();
       }
     } catch (e) {
@@ -248,6 +253,7 @@ class AuthService extends ChangeNotifier {
   void setGuestMode() {
     _currentRole = UserRole.publicGuest;
     _userProfile = null;
+    PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     _clearCachedSession();
     notifyListeners();
   }
@@ -264,6 +270,7 @@ class AuthService extends ChangeNotifier {
     }
     _currentRole = UserRole.publicGuest;
     _userProfile = null;
+    await PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     await _clearCachedSession();
     notifyListeners();
   }

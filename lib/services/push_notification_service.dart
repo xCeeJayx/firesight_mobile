@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../active_inspection_screen.dart';
+import '../models/emergency_report_model.dart';
+import '../screens/public/public_announcements_screen.dart';
+import '../widgets/emergency/emergency_alert_dialog.dart';
 import 'emergency_service.dart';
 
 /// Top-level background message handler required by Firebase Messaging
@@ -28,10 +31,21 @@ class PushNotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
+  /// Channel 1: Standard high importance for inspections & announcements
   static const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
     'high_importance_channel',
-    'Inspection & Emergency Alerts',
-    description: 'Notifications for newly assigned inspections and emergency alerts',
+    'Inspection & Bulletin Advisories',
+    description: 'Notifications for newly assigned inspections and public announcements',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  /// Channel 2: Critical emergency alarm with siren vibration
+  static const AndroidNotificationChannel _emergencyChannel = AndroidNotificationChannel(
+    'emergency_alarm_channel',
+    '🚨 Critical Emergency Alerts',
+    description: 'High-priority critical emergency incident alarms with loud siren sound & continuous vibration',
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
@@ -63,7 +77,16 @@ class PushNotificationService {
 
       debugPrint('FCM Authorization status: ${settings.authorizationStatus}');
 
-      // 3. Initialize Local Notifications for foreground heads-up display
+      // 3. Subscribe all devices to public announcements & verified emergency broadcasts
+      try {
+        await _messaging.subscribeToTopic('public_announcements');
+        await _messaging.subscribeToTopic('emergency_public');
+        debugPrint('Subscribed to public FCM topics: public_announcements, emergency_public');
+      } catch (topicErr) {
+        debugPrint('FCM topic subscription note: $topicErr');
+      }
+
+      // 4. Initialize Local Notifications for foreground heads-up display
       const AndroidInitializationSettings androidSettings =
           AndroidInitializationSettings('@mipmap/launcher_icon');
       const InitializationSettings initSettings = InitializationSettings(android: androidSettings);
@@ -83,12 +106,13 @@ class PushNotificationService {
         },
       );
 
-      // Create Android Notification Channel
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_highImportanceChannel);
+      // Create Android Notification Channels
+      final androidPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.createNotificationChannel(_highImportanceChannel);
+      await androidPlugin?.createNotificationChannel(_emergencyChannel);
 
-      // 4. Retrieve and store device FCM token
+      // 5. Retrieve and store device FCM token
       await _fetchAndSyncToken();
 
       // Listen for token refreshments
@@ -97,19 +121,19 @@ class PushNotificationService {
         syncTokenToSupabase();
       });
 
-      // 5. Handle foreground notifications
+      // 6. Handle foreground notifications
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Received foreground push notification: ${message.notification?.title}');
         _showLocalNotification(message);
       });
 
-      // 6. Handle notification tap when app is in background
+      // 7. Handle notification tap when app is in background
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('Notification clicked while app was in background: ${message.data}');
         _handleNotificationData(message.data);
       });
 
-      // 7. Check if app was opened from terminated state via notification click
+      // 8. Check if app was opened from terminated state via notification click
       final RemoteMessage? initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('Notification launched app from terminated state: ${initialMessage.data}');
@@ -118,6 +142,21 @@ class PushNotificationService {
     } catch (e) {
       debugPrint('PushNotificationService initialization error: $e');
       debugPrint('Note: Ensure google-services.json from Firebase Console is placed in android/app/');
+    }
+  }
+
+  /// Subscribe or unsubscribe from officer emergency topics based on user role
+  Future<void> updateOfficerTopicSubscription({required bool isOfficer}) async {
+    try {
+      if (isOfficer) {
+        await _messaging.subscribeToTopic('emergency_officers');
+        debugPrint('Officer logged in: Subscribed to FCM topic: emergency_officers');
+      } else {
+        await _messaging.unsubscribeFromTopic('emergency_officers');
+        debugPrint('Citizen/Guest mode: Unsubscribed from FCM topic: emergency_officers');
+      }
+    } catch (e) {
+      debugPrint('Error updating officer topic subscription: $e');
     }
   }
 
@@ -174,14 +213,19 @@ class PushNotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
+    final isEmergency = message.data['type'] == 'emergency' ||
+        message.data['report_id'] != null ||
+        (notification.title?.toUpperCase().contains('EMERGENCY') ?? false);
+
     final androidDetails = AndroidNotificationDetails(
-      _highImportanceChannel.id,
-      _highImportanceChannel.name,
-      channelDescription: _highImportanceChannel.description,
+      isEmergency ? _emergencyChannel.id : _highImportanceChannel.id,
+      isEmergency ? _emergencyChannel.name : _highImportanceChannel.name,
+      channelDescription:
+          isEmergency ? _emergencyChannel.description : _highImportanceChannel.description,
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max,
       icon: '@mipmap/launcher_icon',
-      color: const Color(0xFFD84315), // BFP Fire Orange
+      color: isEmergency ? const Color(0xFFDC2626) : const Color(0xFFD84315),
       playSound: true,
       enableVibration: true,
     );
@@ -190,24 +234,135 @@ class PushNotificationService {
 
     _localNotifications.show(
       id: notification.hashCode,
-      title: notification.title ?? 'Inspection Notification',
-      body: notification.body ?? 'You have a new inspection update.',
+      title: notification.title ?? (isEmergency ? '🚨 Emergency Alert' : 'Inspection Notification'),
+      body: notification.body ?? 'Emergency update received.',
       notificationDetails: notificationDetails,
       payload: jsonEncode(message.data),
     );
   }
 
-  /// Route the user to the active inspection screen
+  /// Route the user based on notification payload type
   void _handleNotificationData(Map<String, dynamic> data) {
+    final String? type = data['type']?.toString();
+    final String? announcementId = data['announcement_id']?.toString();
+    final String? emergencyId = data['report_id']?.toString() ?? data['emergency_id']?.toString();
+
+    // 1. Handle Public Announcements
+    if (type == 'announcement' || announcementId != null) {
+      _handleAnnouncementData(data);
+      return;
+    }
+
+    // 2. Handle Emergency Incidents
+    if (type == 'emergency' || emergencyId != null) {
+      _handleEmergencyData(data);
+      return;
+    }
+
+    // 3. Handle Inspection Scheduling
     final inspectionId = data['inspection_id']?.toString() ?? data['assignmentId']?.toString();
 
     if (inspectionId == null || inspectionId.isEmpty) {
-      debugPrint('No inspection_id found in notification data: $data');
+      debugPrint('No recognized entity id found in notification data: $data');
       return;
     }
 
     _pendingInspectionId = inspectionId;
     _navigateToInspection(inspectionId);
+  }
+
+  /// Handle emergency push notification tap: Fetch report and display EmergencyAlertDialog
+  Future<void> _handleEmergencyData(Map<String, dynamic> data) async {
+    final String? reportId = data['report_id']?.toString() ?? data['id']?.toString();
+
+    EmergencyReportModel? report;
+
+    // Try fetching fresh report record from Supabase
+    if (reportId != null && reportId.isNotEmpty) {
+      try {
+        final res = await Supabase.instance.client
+            .from('emergency_reports')
+            .select()
+            .eq('id', reportId)
+            .maybeSingle();
+        if (res != null) {
+          report = EmergencyReportModel.fromJson(res);
+        }
+      } catch (e) {
+        debugPrint('Error fetching emergency report from DB: $e');
+      }
+    }
+
+    // Fallback: construct report from push notification data payload
+    report ??= EmergencyReportModel(
+      id: reportId ?? 'emergency-${DateTime.now().millisecondsSinceEpoch}',
+      reporterName: data['reporter_name']?.toString() ?? 'Anonymous Citizen',
+      incidentType: data['incident_type']?.toString() ?? 'Emergency Incident',
+      barangay: data['barangay']?.toString() ?? 'Lingayen',
+      address: data['address']?.toString(),
+      status: data['status']?.toString() ?? 'Unverified',
+      description: data['description']?.toString(),
+      photoUrl: data['photo_url']?.toString(),
+      latitude: double.tryParse(data['latitude']?.toString() ?? ''),
+      longitude: double.tryParse(data['longitude']?.toString() ?? ''),
+      createdAt: DateTime.now(),
+    );
+
+    final title = report.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
+
+    void showEmergencyPopup(BuildContext ctx) {
+      EmergencyAlertDialog.show(
+        ctx,
+        report!,
+        alertTitle: title,
+      );
+    }
+
+    final navContext = EmergencyService.navigatorKey.currentContext;
+    if (navContext != null) {
+      showEmergencyPopup(navContext);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final delayedCtx = EmergencyService.navigatorKey.currentContext;
+        if (delayedCtx != null) {
+          showEmergencyPopup(delayedCtx);
+        }
+      });
+    }
+  }
+
+  /// Display announcement bulletin dialog
+  void _handleAnnouncementData(Map<String, dynamic> data) {
+    final title = data['title']?.toString() ?? 'BFP Public Safety Bulletin';
+    final content = data['content']?.toString() ?? '';
+    final priority = data['priority']?.toString() ?? 'normal';
+    final createdBy = data['created_by']?.toString() ?? 'BFP Lingayen';
+
+    final navContext = EmergencyService.navigatorKey.currentContext;
+    if (navContext != null) {
+      PublicAnnouncementsScreen.showAnnouncementModal(
+        context: navContext,
+        title: title,
+        content: content,
+        priority: priority,
+        dateStr: 'Just now',
+        createdBy: createdBy,
+      );
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final delayedContext = EmergencyService.navigatorKey.currentContext;
+        if (delayedContext != null) {
+          PublicAnnouncementsScreen.showAnnouncementModal(
+            context: delayedContext,
+            title: title,
+            content: content,
+            priority: priority,
+            dateStr: 'Just now',
+            createdBy: createdBy,
+          );
+        }
+      });
+    }
   }
 
   /// Execute navigation to the specific ActiveInspectionScreen

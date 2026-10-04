@@ -82,7 +82,6 @@ async function getGoogleAccessToken(serviceAccount: {
 
   const signedJwt = `${unsignedToken}.${base64UrlEncode(new Uint8Array(signature))}`;
 
-  // Request OAuth access token from Google
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -101,6 +100,30 @@ async function getGoogleAccessToken(serviceAccount: {
   return tokenData.access_token;
 }
 
+// Helper to send message via FCM v1 API
+async function sendFcmMessage(projectId: string, accessToken: string, messagePayload: any) {
+  const res = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: messagePayload }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("FCM API error response:", errText);
+    return { sent: false, note: errText };
+  }
+
+  const fcmData = await res.json();
+  return { sent: true, note: fcmData.name };
+}
+
 serve(async (req) => {
   // 1. Handle CORS Preflight
   if (req.method === "OPTIONS") {
@@ -110,12 +133,282 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // 2. Parse request payload (Supports both direct call and Supabase Webhook)
     const body = await req.json();
 
+    const firebaseServiceAccountEnv = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
+    const serviceAccount = firebaseServiceAccountEnv
+      ? JSON.parse(firebaseServiceAccountEnv)
+      : DEFAULT_FIREBASE_SERVICE_ACCOUNT;
+
+    // =========================================================================
+    // BRANCH A: PUBLIC ANNOUNCEMENT BROADCAST (FCM Topic: public_announcements)
+    // =========================================================================
+    const isAnnouncement = body.action === "announcement" || body.type === "announcement";
+
+    if (isAnnouncement) {
+      const announcementId = body.id || body.announcement_id;
+      const title = body.title || "Public Safety Bulletin";
+      const content = body.content || "";
+      const priority = (body.priority || "normal").toLowerCase();
+      const createdBy = body.created_by || body.createdBy || "BFP Lingayen";
+
+      const isUrgent = priority === "urgent";
+      const notifTitle = isUrgent ? `🚨 URGENT: ${title}` : `📢 BFP Advisory: ${title}`;
+      const notifBody = content.length > 140 ? `${content.substring(0, 137)}...` : content;
+
+      let fcmResult = { sent: false, note: "" };
+
+      try {
+        const accessToken = await getGoogleAccessToken(serviceAccount);
+
+        const fcmPayload = {
+          topic: "public_announcements",
+          notification: {
+            title: notifTitle,
+            body: notifBody,
+          },
+          data: {
+            type: "announcement",
+            announcement_id: String(announcementId || ""),
+            title: String(title),
+            content: String(content),
+            priority: String(priority),
+            created_by: String(createdBy),
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          },
+          android: {
+            priority: "HIGH",
+            notification: {
+              channel_id: "high_importance_channel",
+              sound: "default",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+          },
+        };
+
+        fcmResult = await sendFcmMessage(serviceAccount.project_id, accessToken, fcmPayload);
+      } catch (err: any) {
+        console.error("Exception broadcasting FCM announcement:", err);
+        fcmResult = { sent: false, note: err?.message || "Failed to broadcast announcement" };
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          type: "announcement",
+          fcm: fcmResult,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
+
+    // =========================================================================
+    // BRANCH B: EMERGENCY INCIDENT PUSH NOTIFICATIONS
+    // (Officers receive Unverified + Verified; Public receives Verified only)
+    // =========================================================================
+    const isEmergency =
+      body.action === "emergency" ||
+      body.action === "emergency_report" ||
+      body.action === "emergency_update" ||
+      body.type === "emergency";
+
+    if (isEmergency) {
+      const reportId = body.id || body.report_id || body.reportId;
+      const incidentType = body.incident_type || body.incidentType || "Emergency Incident";
+      const barangay = body.barangay || "Lingayen";
+      const address = body.address || "";
+      const status = (body.status || "Unverified").toString();
+      const description = body.description || "";
+      const photoUrl = body.photo_url || body.photoUrl || "";
+      const reporterName = body.reporter_name || body.reporterName || "Anonymous Citizen";
+      const latitude = body.latitude?.toString() || "";
+      const longitude = body.longitude?.toString() || "";
+
+      const statusLower = status.toLowerCase();
+      const isUnverified = statusLower === "unverified";
+      const isVerified = statusLower === "verified" || statusLower === "responding" || statusLower === "dispatched";
+      const isResolved = statusLower === "resolved" || statusLower === "false alarm";
+
+      const accessToken = await getGoogleAccessToken(serviceAccount);
+      const results: Record<string, any> = {};
+
+      const baseEmergencyData = {
+        type: "emergency",
+        report_id: String(reportId || ""),
+        incident_type: String(incidentType),
+        barangay: String(barangay),
+        address: String(address),
+        status: String(status),
+        description: String(description),
+        photo_url: String(photoUrl),
+        reporter_name: String(reporterName),
+        latitude: String(latitude),
+        longitude: String(longitude),
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+      };
+
+      // 1. UNVERIFIED EMERGENCY: Send ONLY to Officers
+      if (isUnverified) {
+        const officerTitle = `🚨 INCOMING EMERGENCY: ${incidentType.toUpperCase()}`;
+        const officerBody = `New incident reported in ${barangay}. Tap to review and dispatch responders.`;
+
+        const officerPayload = {
+          topic: "emergency_officers",
+          notification: {
+            title: officerTitle,
+            body: officerBody,
+          },
+          data: {
+            ...baseEmergencyData,
+            is_verified: "false",
+          },
+          android: {
+            priority: "HIGH",
+            notification: {
+              channel_id: "emergency_alarm_channel",
+              sound: "default",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+          },
+        };
+
+        results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, officerPayload);
+      }
+
+      // 2. VERIFIED / RESPONDING EMERGENCY: Broadcast to Public AND notify Officers
+      if (isVerified) {
+        // A. Public Broadcast
+        const publicTitle = `🚨 BFP EMERGENCY ALERT: ${incidentType.toUpperCase()}`;
+        const publicBody = `Verified emergency in ${barangay}. BFP units responding. Stay alert & give way.`;
+
+        const publicPayload = {
+          topic: "emergency_public",
+          notification: {
+            title: publicTitle,
+            body: publicBody,
+          },
+          data: {
+            ...baseEmergencyData,
+            is_verified: "true",
+          },
+          android: {
+            priority: "HIGH",
+            notification: {
+              channel_id: "emergency_alarm_channel",
+              sound: "default",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+          },
+        };
+
+        results.public = await sendFcmMessage(serviceAccount.project_id, accessToken, publicPayload);
+
+        // B. Officers Update Broadcast
+        const officerUpdateTitle = `🚒 EMERGENCY UPDATE: ${status.toUpperCase()} (${incidentType.toUpperCase()})`;
+        const officerUpdateBody = `Incident in ${barangay} updated to ${status}.`;
+
+        const officerUpdatePayload = {
+          topic: "emergency_officers",
+          notification: {
+            title: officerUpdateTitle,
+            body: officerUpdateBody,
+          },
+          data: {
+            ...baseEmergencyData,
+            is_verified: "true",
+          },
+          android: {
+            priority: "HIGH",
+            notification: {
+              channel_id: "emergency_alarm_channel",
+              sound: "default",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+          },
+        };
+
+        results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, officerUpdatePayload);
+      }
+
+      // 3. RESOLVED / FALSE ALARM: Notify Officers
+      if (isResolved) {
+        const resolvedTitle = `✅ Incident ${status}: ${incidentType}`;
+        const resolvedBody = `Report for ${barangay} marked as ${status}.`;
+
+        const resolvedPayload = {
+          topic: "emergency_officers",
+          notification: {
+            title: resolvedTitle,
+            body: resolvedBody,
+          },
+          data: {
+            ...baseEmergencyData,
+            is_verified: isVerified ? "true" : "false",
+          },
+          android: {
+            priority: "HIGH",
+            notification: {
+              channel_id: "emergency_alarm_channel",
+              sound: "default",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+          },
+        };
+
+        results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, resolvedPayload);
+      }
+
+      // Save in-app notification in public.notifications for active station officers & inspectors
+      try {
+        const { data: officers } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .in("role", ["station_officer", "risk_officer", "inspector", "admin"]);
+
+        if (officers && officers.length > 0) {
+          const notifRows = officers.map((off: any) => ({
+            user_id: off.id,
+            title: isVerified
+              ? `🚨 Verified Emergency: ${incidentType}`
+              : `🚨 Incoming Emergency Report: ${incidentType}`,
+            body: `${incidentType} reported in ${barangay} (Status: ${status}).`,
+            type: "emergency_report",
+            data: {
+              report_id: reportId,
+              incident_type: incidentType,
+              barangay: barangay,
+              status: status,
+            },
+          }));
+
+          await supabaseAdmin.from("notifications").insert(notifRows);
+        }
+      } catch (dbErr: any) {
+        console.warn("Notice: Storing emergency in-app notifications:", dbErr?.message);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          type: "emergency",
+          status: status,
+          results: results,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
+
+    // =========================================================================
+    // BRANCH C: TARGETED INSPECTION SCHEDULE NOTIFICATION (Inspector Device)
+    // =========================================================================
     let inspectionId = body.inspectionId || body.inspection_id;
     let inspectorId = body.inspectorId || body.inspector_id;
     let businessName = body.businessName || body.business_name;
@@ -138,7 +431,7 @@ serve(async (req) => {
       );
     }
 
-    // 3. Fetch inspector profile to retrieve FCM push token and name
+    // Fetch inspector profile to retrieve FCM push token and name
     const { data: inspectorProfile, error: profileErr } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, role, fcm_token")
@@ -155,7 +448,7 @@ serve(async (req) => {
     const notifTitle = "🚨 New Inspection Scheduled";
     const notifBody = `Officer assigned you to inspect ${businessName || "an establishment"} (Order: ${orderNo || "N/A"}).`;
 
-    // 4. Record In-App Notification in public.notifications table (non-blocking)
+    // Record In-App Notification in public.notifications table (non-blocking)
     try {
       const { error: notifInsertErr } = await supabaseAdmin.from("notifications").insert([
         {
@@ -179,13 +472,8 @@ serve(async (req) => {
       console.warn("Notice: Notifications table insert note:", dbErr?.message);
     }
 
-    // 5. Send FCM Push Notification using Service Account Credentials
+    // Send FCM Push Notification using Service Account Credentials
     let fcmResult = { sent: false, note: "No FCM token for inspector" };
-
-    const firebaseServiceAccountEnv = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
-    const serviceAccount = firebaseServiceAccountEnv
-      ? JSON.parse(firebaseServiceAccountEnv)
-      : DEFAULT_FIREBASE_SERVICE_ACCOUNT;
 
     if (!fcmToken) {
       fcmResult = {
@@ -197,50 +485,28 @@ serve(async (req) => {
         const accessToken = await getGoogleAccessToken(serviceAccount);
 
         const fcmPayload = {
-          message: {
-            token: fcmToken,
+          token: fcmToken,
+          notification: {
+            title: notifTitle,
+            body: notifBody,
+          },
+          data: {
+            inspection_id: String(inspectionId || ""),
+            order_no: String(orderNo || ""),
+            business_name: String(businessName || ""),
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          },
+          android: {
+            priority: "HIGH",
             notification: {
-              title: notifTitle,
-              body: notifBody,
-            },
-            data: {
-              inspection_id: String(inspectionId || ""),
-              order_no: String(orderNo || ""),
-              business_name: String(businessName || ""),
+              channel_id: "high_importance_channel",
+              sound: "default",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
-            },
-            android: {
-              priority: "high",
-              notification: {
-                channel_id: "high_importance_channel",
-                sound: "default",
-                priority: "high",
-                click_action: "FLUTTER_NOTIFICATION_CLICK",
-              },
             },
           },
         };
 
-        const fcmRes = await fetch(
-          `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(fcmPayload),
-          }
-        );
-
-        if (!fcmRes.ok) {
-          const fcmErrText = await fcmRes.text();
-          console.error("FCM API error response:", fcmErrText);
-          fcmResult = { sent: false, note: `FCM Error: ${fcmErrText}` };
-        } else {
-          const fcmData = await fcmRes.json();
-          fcmResult = { sent: true, note: fcmData.name };
-        }
+        fcmResult = await sendFcmMessage(serviceAccount.project_id, accessToken, fcmPayload);
       } catch (err: any) {
         console.error("Exception sending FCM push:", err);
         fcmResult = { sent: false, note: err?.message || "Failed to dispatch FCM message." };

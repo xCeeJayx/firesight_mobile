@@ -1,5 +1,5 @@
 -- ============================================================================
--- FIRESIGHT MIGRATION: NOTIFICATIONS & FCM TOKENS FOR INSPECTOR ALERTS
+-- FIRESIGHT MIGRATION: NOTIFICATIONS & FCM TOKENS FOR INSPECTOR & EMERGENCY ALERTS
 -- ============================================================================
 
 -- 1. Add FCM Token storage to profiles table
@@ -86,3 +86,59 @@ AFTER INSERT OR UPDATE OF inspector_id, business_name, overall_status
 ON public.inspections
 FOR EACH ROW
 EXECUTE FUNCTION notify_inspector_on_schedule();
+
+-- ============================================================================
+-- 5. EMERGENCY PUSH NOTIFICATION TRIGGER (via pg_net)
+-- Automatically dispatches to send-inspection-notification Edge Function
+-- on emergency_reports INSERT and status changes:
+-- - Unverified reports -> Dispatched to topic 'emergency_officers'
+-- - Verified / Responding reports -> Broadcast to topic 'emergency_public' and 'emergency_officers'
+-- ============================================================================
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+CREATE OR REPLACE FUNCTION notify_emergency_report_trigger()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_payload JSONB;
+BEGIN
+  IF (TG_OP = 'INSERT') OR 
+     (TG_OP = 'UPDATE' AND (OLD.status IS DISTINCT FROM NEW.status)) THEN
+     
+    v_payload := jsonb_build_object(
+      'action', 'emergency',
+      'id', NEW.id,
+      'incident_type', NEW.incident_type,
+      'barangay', NEW.barangay,
+      'address', NEW.address,
+      'status', NEW.status,
+      'description', NEW.description,
+      'photo_url', NEW.photo_url,
+      'reporter_name', NEW.reporter_name,
+      'latitude', NEW.latitude,
+      'longitude', NEW.longitude,
+      'created_at', NEW.created_at,
+      'old_status', CASE WHEN TG_OP = 'UPDATE' THEN OLD.status ELSE NULL END
+    );
+
+    PERFORM net.http_post(
+      url := 'https://lapfwiawufudxervauzc.supabase.co/functions/v1/send-inspection-notification',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json'
+      ),
+      body := v_payload
+    );
+  END IF;
+
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'notify_emergency_report_trigger warning: %', SQLERRM;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_notify_emergency_report ON public.emergency_reports;
+CREATE TRIGGER trigger_notify_emergency_report
+AFTER INSERT OR UPDATE OF status
+ON public.emergency_reports
+FOR EACH ROW
+EXECUTE FUNCTION notify_emergency_report_trigger();
