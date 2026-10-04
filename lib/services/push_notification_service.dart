@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -54,23 +53,36 @@ class PushNotificationService {
 
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
-  /// Channel 1: Standard high importance for inspections & announcements
-  static const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
-    'high_importance_channel',
-    'Inspection & Bulletin Advisories',
-    description: 'Notifications for newly assigned inspections and public announcements',
-    importance: Importance.max,
-    playSound: true,
-    enableVibration: true,
-  );
-
-  /// Channel 2: Critical emergency alarm with siren vibration
+  /// Channel 1: Critical Emergency Alarms (Officers & Critical Incidents) with loud siren sound
   static const AndroidNotificationChannel _emergencyChannel = AndroidNotificationChannel(
-    'emergency_alarm_channel',
+    'emergency_alarm_channel_v3',
     '🚨 Critical Emergency Alerts',
     description: 'High-priority critical emergency incident alarms with loud siren sound & continuous vibration',
     importance: Importance.max,
     playSound: true,
+    sound: RawResourceAndroidNotificationSound('emergency_siren'),
+    enableVibration: true,
+  );
+
+  /// Channel 2: Public Bulletins, Advisories & Announcements with crisp melodic chime sound
+  static const AndroidNotificationChannel _publicBulletinChannel = AndroidNotificationChannel(
+    'public_bulletin_channel_v3',
+    '📢 Public Bulletins & Advisories',
+    description: 'Public safety advisories, community bulletins, and public emergency broadcasts',
+    importance: Importance.max,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('public_chime'),
+    enableVibration: true,
+  );
+
+  /// Channel 3: Inspection Advisories for assigned personnel
+  static const AndroidNotificationChannel _inspectionChannel = AndroidNotificationChannel(
+    'inspection_channel_v3',
+    'Inspection Advisories',
+    description: 'Notifications for newly assigned inspections',
+    importance: Importance.max,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('public_chime'),
     enableVibration: true,
   );
 
@@ -84,6 +96,9 @@ class PushNotificationService {
   Stream<Map<String, dynamic>> get onNotificationReceived =>
       _onNotificationReceivedController.stream;
   String? _pendingInspectionId;
+
+  /// Track recently handled alert keys to prevent duplicate popping within a short window
+  final Set<String> _recentlyHandledKeys = {};
 
   /// Initialize Firebase Push Notifications & Local Notification channels
   Future<void> initialize() async {
@@ -128,16 +143,17 @@ class PushNotificationService {
         debugPrint('Permission request note: $permErr');
       }
 
-      // 3. Subscribe all devices to public announcements & verified emergency broadcasts
+      // 3. Initial subscription to public topics
       try {
         await _messaging.subscribeToTopic('public_announcements');
         await _messaging.subscribeToTopic('emergency_public');
-        debugPrint('Subscribed to public FCM topics: public_announcements, emergency_public');
+        await _messaging.unsubscribeFromTopic('emergency_officers');
+        debugPrint('Subscribed to initial public FCM topics: public_announcements, emergency_public');
       } catch (topicErr) {
         debugPrint('FCM topic subscription note: $topicErr');
       }
 
-      // 4. Initialize Local Notifications for foreground heads-up display
+      // 4. Initialize Local Notifications
       const AndroidInitializationSettings androidSettings =
           AndroidInitializationSettings('@drawable/ic_notification');
       const InitializationSettings initSettings = InitializationSettings(android: androidSettings);
@@ -149,7 +165,7 @@ class PushNotificationService {
           if (payload != null && payload.isNotEmpty) {
             try {
               final Map<String, dynamic> data = jsonDecode(payload);
-              _handleNotificationData(data);
+              _handleNotificationData(data, isForeground: false);
             } catch (e) {
               debugPrint('Error decoding notification payload: $e');
             }
@@ -157,11 +173,18 @@ class PushNotificationService {
         },
       );
 
-      // Create Android Notification Channels
+      // Create Android Notification Channels with dedicated sound configurations
       final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.createNotificationChannel(_highImportanceChannel);
       await androidPlugin?.createNotificationChannel(_emergencyChannel);
+      await androidPlugin?.createNotificationChannel(_publicBulletinChannel);
+      await androidPlugin?.createNotificationChannel(_inspectionChannel);
+
+      // Clean up deprecated v1/v2 channels
+      try {
+        await androidPlugin?.deleteNotificationChannel(channelId: 'emergency_alarm_channel');
+        await androidPlugin?.deleteNotificationChannel(channelId: 'high_importance_channel');
+      } catch (_) {}
 
       // 5. Retrieve and store device FCM token
       await _fetchAndSyncToken();
@@ -172,24 +195,31 @@ class PushNotificationService {
         syncTokenToSupabase();
       });
 
-      // 6. Handle foreground notifications
+      // 6. Handle foreground notifications:
+      // When user is actively IN the app, ONLY trigger on-screen alert / modal dialog.
+      // Do NOT display a push notification banner in the system notification shade.
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('Received foreground push notification: ${message.notification?.title}');
-        _showLocalNotification(message);
+        final title = message.notification?.title ?? message.data['title'] ?? 'Notification';
+        debugPrint('Received in-app foreground notification: $title');
+
+        // A) Broadcast to in-app stream listeners (e.g. unread badge count)
         _onNotificationReceivedController.add(message.data);
+
+        // B) Directly pop up the in-app alert dialog/modal on screen (with siren audio for emergencies)
+        _handleNotificationData(message.data, isForeground: true);
       });
 
       // 7. Handle notification tap when app is in background
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('Notification clicked while app was in background: ${message.data}');
-        _handleNotificationData(message.data);
+        _handleNotificationData(message.data, isForeground: false);
       });
 
       // 8. Check if app was opened from terminated state via notification click
       final RemoteMessage? initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('Notification launched app from terminated state: ${initialMessage.data}');
-        _handleNotificationData(initialMessage.data);
+        _handleNotificationData(initialMessage.data, isForeground: false);
       }
     } catch (e) {
       debugPrint('PushNotificationService initialization error: $e');
@@ -203,21 +233,23 @@ class PushNotificationService {
       await ensureFirebaseInitialized();
       if (Firebase.apps.isEmpty) return;
 
-      // Always guarantee subscription to public bulletins and verified emergency broadcasts
+      // Always guarantee subscription to public announcements
       try {
         await _messaging.subscribeToTopic('public_announcements');
-        await _messaging.subscribeToTopic('emergency_public');
-        debugPrint('Device subscribed to public FCM topics: public_announcements, emergency_public');
       } catch (pubErr) {
         debugPrint('Public topic subscription note: $pubErr');
       }
 
       if (isOfficer) {
+        // Officer: Subscribe to officer alerts, UNSUBSCRIBE from public emergency alerts so NO DUPLICATES!
         await _messaging.subscribeToTopic('emergency_officers');
-        debugPrint('Officer logged in: Subscribed to FCM topic: emergency_officers');
+        await _messaging.unsubscribeFromTopic('emergency_public');
+        debugPrint('Officer mode: Subscribed to emergency_officers; Unsubscribed from emergency_public');
       } else {
+        // Citizen / Guest: Subscribe to public emergency broadcasts, UNSUBSCRIBE from officer alerts
+        await _messaging.subscribeToTopic('emergency_public');
         await _messaging.unsubscribeFromTopic('emergency_officers');
-        debugPrint('Citizen/Guest mode: Unsubscribed from FCM topic: emergency_officers');
+        debugPrint('Citizen/Guest mode: Subscribed to emergency_public; Unsubscribed from emergency_officers');
       }
     } catch (e) {
       debugPrint('Error updating officer topic subscription: $e');
@@ -293,44 +325,78 @@ class PushNotificationService {
     }
   }
 
-  /// Display a heads-up banner when notification arrives in the foreground
-  void _showLocalNotification(RemoteMessage message) {
-    final notification = message.notification;
-    if (notification == null) return;
+  /// Optional helper to display a heads-up banner locally if needed
+  void showLocalNotification(RemoteMessage message) {
+    final title = message.notification?.title ?? message.data['title']?.toString();
+    final body = message.notification?.body ??
+        message.data['body']?.toString() ??
+        message.data['content']?.toString();
+
+    if (title == null && body == null) return;
 
     final isEmergency = message.data['type'] == 'emergency' ||
         message.data['report_id'] != null ||
-        (notification.title?.toUpperCase().contains('EMERGENCY') ?? false);
+        (title?.toUpperCase().contains('EMERGENCY') ?? false);
 
     final androidDetails = AndroidNotificationDetails(
-      isEmergency ? _emergencyChannel.id : _highImportanceChannel.id,
-      isEmergency ? _emergencyChannel.name : _highImportanceChannel.name,
+      isEmergency ? _emergencyChannel.id : _publicBulletinChannel.id,
+      isEmergency ? _emergencyChannel.name : _publicBulletinChannel.name,
       channelDescription:
-          isEmergency ? _emergencyChannel.description : _highImportanceChannel.description,
+          isEmergency ? _emergencyChannel.description : _publicBulletinChannel.description,
       importance: Importance.max,
       priority: Priority.max,
       icon: '@drawable/ic_notification',
-      color: isEmergency ? const Color(0xFFDC2626) : const Color(0xFFD84315),
+      largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
+      color: isEmergency ? const Color(0xFFDC2626) : const Color(0xFFEA580C),
       playSound: true,
+      sound: RawResourceAndroidNotificationSound(
+        isEmergency ? 'emergency_siren' : 'public_chime',
+      ),
       enableVibration: true,
     );
 
     final notificationDetails = NotificationDetails(android: androidDetails);
 
     _localNotifications.show(
-      id: notification.hashCode,
-      title: notification.title ?? (isEmergency ? '🚨 Emergency Alert' : 'Inspection Notification'),
-      body: notification.body ?? 'Emergency update received.',
+      id: message.messageId.hashCode != 0
+          ? message.messageId.hashCode
+          : (title.hashCode ^ DateTime.now().millisecondsSinceEpoch),
+      title: title ?? (isEmergency ? '🚨 Emergency Alert' : 'FireSight Notification'),
+      body: body ?? 'New update received.',
       notificationDetails: notificationDetails,
       payload: jsonEncode(message.data),
     );
   }
 
   /// Route the user based on notification payload type
-  void _handleNotificationData(Map<String, dynamic> data) {
+  void _handleNotificationData(Map<String, dynamic> data, {bool isForeground = false}) {
+    if (data.isEmpty) return;
+
     final String? type = data['type']?.toString();
-    final String? announcementId = data['announcement_id']?.toString();
+    final String? announcementId = data['announcement_id']?.toString() ?? data['id']?.toString();
     final String? emergencyId = data['report_id']?.toString() ?? data['emergency_id']?.toString();
+    final String? inspectionId = data['inspection_id']?.toString() ?? data['assignmentId']?.toString();
+
+    // Determine unique deduplication key
+    String? dedupeKey;
+    if (type == 'emergency' || emergencyId != null) {
+      dedupeKey = 'emergency_${emergencyId ?? data['id']}';
+    } else if (type == 'announcement' || announcementId != null) {
+      dedupeKey = 'announcement_${announcementId ?? data['title']}';
+    } else if (inspectionId != null) {
+      dedupeKey = 'inspection_$inspectionId';
+    }
+
+    if (dedupeKey != null) {
+      if (_recentlyHandledKeys.contains(dedupeKey)) {
+        debugPrint('Skipping duplicate alert presentation for key: $dedupeKey');
+        return;
+      }
+      _recentlyHandledKeys.add(dedupeKey);
+      Future.delayed(const Duration(seconds: 8), () {
+        _recentlyHandledKeys.remove(dedupeKey);
+      });
+    }
 
     // 1. Handle Public Announcements
     if (type == 'announcement' || announcementId != null) {
@@ -345,15 +411,159 @@ class PushNotificationService {
     }
 
     // 3. Handle Inspection Scheduling
-    final inspectionId = data['inspection_id']?.toString() ?? data['assignmentId']?.toString();
-
-    if (inspectionId == null || inspectionId.isEmpty) {
-      debugPrint('No recognized entity id found in notification data: $data');
+    if (inspectionId != null && inspectionId.isNotEmpty) {
+      if (isForeground) {
+        // While user is in the app, display an alert dialog with establishment details
+        _showInspectionAlertDialog(data, inspectionId);
+      } else {
+        // Tapped from background / notification shade: navigate directly
+        _pendingInspectionId = inspectionId;
+        _navigateToInspection(inspectionId);
+      }
       return;
     }
 
-    _pendingInspectionId = inspectionId;
-    _navigateToInspection(inspectionId);
+    debugPrint('No recognized entity id found in notification data: $data');
+  }
+
+  /// Display in-app alert dialog for scheduled inspection assignments in foreground
+  void _showInspectionAlertDialog(Map<String, dynamic> data, String inspectionId) {
+    final businessName = data['business_name']?.toString() ??
+        data['establishment_name']?.toString() ??
+        data['title']?.toString() ??
+        'Assigned Commercial Establishment';
+    final schedule = data['schedule']?.toString() ??
+        data['inspection_date']?.toString() ??
+        'Scheduled Today';
+    final address = data['address']?.toString() ?? data['barangay']?.toString();
+
+    void showModal(BuildContext ctx) {
+      showDialog(
+        context: ctx,
+        barrierDismissible: true,
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEDD5),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFEA580C).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.assignment_turned_in_rounded,
+                  color: Color(0xFFEA580C),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'New Inspection Assigned',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                businessName,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              if (address != null && address.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 14, color: Color(0xFF64748B)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        address,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF475569)),
+                    const SizedBox(width: 6),
+                    Text(
+                      schedule,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text(
+                'Later',
+                style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEA580C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                _pendingInspectionId = inspectionId;
+                _navigateToInspection(inspectionId);
+              },
+              child: const Text('Open Inspection'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final navContext = EmergencyService.navigatorKey.currentContext;
+    if (navContext != null) {
+      showModal(navContext);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final delayedCtx = EmergencyService.navigatorKey.currentContext;
+        if (delayedCtx != null) {
+          showModal(delayedCtx);
+        }
+      });
+    }
   }
 
   /// Handle emergency push notification tap: Fetch report and display EmergencyAlertDialog
@@ -393,27 +603,26 @@ class PushNotificationService {
       createdAt: DateTime.now(),
     );
 
+    if (report.id.isNotEmpty) {
+      if (EmergencyService().isRecentlyAlerted(report.id)) {
+        debugPrint('Emergency report ${report.id} already alerted in-app. Skipping duplicate.');
+        return;
+      }
+      EmergencyService().markAlerted(report.id);
+    }
+
     final title = report.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
 
-    void showEmergencyPopup(BuildContext ctx) {
-      EmergencyAlertDialog.show(
-        ctx,
-        report!,
-        alertTitle: title,
-      );
-    }
-
-    final navContext = EmergencyService.navigatorKey.currentContext;
-    if (navContext != null) {
-      showEmergencyPopup(navContext);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final delayedCtx = EmergencyService.navigatorKey.currentContext;
-        if (delayedCtx != null) {
-          showEmergencyPopup(delayedCtx);
-        }
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final currentCtx = EmergencyService.navigatorKey.currentContext;
+      if (currentCtx != null) {
+        EmergencyAlertDialog.show(
+          currentCtx,
+          report!,
+          alertTitle: title,
+        );
+      }
+    });
   }
 
   /// Display announcement bulletin dialog

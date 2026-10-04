@@ -124,27 +124,8 @@ class SupabaseService {
 
       final response = await _client.from('emergency_reports').insert(reportData).select().single();
 
-      // Dispatch push notification to officers (non-blocking)
-      try {
-        _client.functions.invoke('send-inspection-notification', body: {
-          'action': 'emergency',
-          'id': response['id'],
-          'incident_type': incidentType,
-          'barangay': barangay,
-          'address': address,
-          'status': 'Unverified',
-          'description': description,
-          'photo_url': photoUrl,
-          'reporter_name': reporterName,
-          'latitude': latitude,
-          'longitude': longitude,
-        }).catchError((err) {
-          debugPrint('Notice: Error dispatching emergency push notification: $err');
-          return FunctionResponse(data: null, status: 500);
-        });
-      } catch (invokeErr) {
-        debugPrint('Emergency push invoke exception: $invokeErr');
-      }
+      // Note: The database trigger (trigger_notify_emergency_report) automatically
+      // dispatches push notifications on emergency_reports INSERT via pg_net.
 
       return {'success': true, 'data': response};
     } catch (e) {

@@ -25,6 +25,12 @@ class EmergencyService {
   /// Track recently alerted incident IDs to avoid duplicate alerts
   final Set<String> _recentlyAlertedIds = {};
 
+  bool isRecentlyAlerted(String id) => _recentlyAlertedIds.contains(id);
+  void markAlerted(String id) {
+    _recentlyAlertedIds.add(id);
+    Future.delayed(const Duration(seconds: 12), () => _recentlyAlertedIds.remove(id));
+  }
+
   bool _isInitialized = false;
 
   /// Initialize real-time listener and fetch latest emergency reports
@@ -208,27 +214,8 @@ class EmergencyService {
         reportsNotifier.value = currentList;
       }
 
-      // Dispatch push notification update (public receives if verified/responding, officers always)
-      try {
-        _client.functions.invoke('send-inspection-notification', body: {
-          'action': 'emergency',
-          'id': id,
-          'incident_type': updatedReport?.incidentType ?? 'Emergency Incident',
-          'barangay': updatedReport?.barangay ?? 'Lingayen',
-          'address': updatedReport?.address ?? '',
-          'status': newStatus,
-          'description': updatedReport?.description ?? '',
-          'photo_url': updatedReport?.photoUrl ?? '',
-          'latitude': updatedReport?.latitude,
-          'longitude': updatedReport?.longitude,
-        }).catchError((err) {
-          debugPrint('Notice: Error dispatching status update push notification: $err');
-          return FunctionResponse(data: null, status: 500);
-        });
-      } catch (invokeErr) {
-        debugPrint('Emergency update push invoke exception: $invokeErr');
-      }
-
+      // Note: The database trigger (trigger_notify_emergency_report) automatically
+      // dispatches push notifications on emergency_reports status changes via pg_net.
       return true;
     } catch (e) {
       debugPrint('Error updating report status in Supabase: $e');

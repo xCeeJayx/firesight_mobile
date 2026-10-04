@@ -55,7 +55,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.85,
+      initialChildSize: 0.88,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (context, scrollController) {
@@ -220,7 +220,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         icon: Icons.shield_rounded,
                         title: 'Fire Safety & Preparedness',
                         subtitle:
-                            'Evacuation drills, safety awareness, and training',
+                            'Evacuation drills, training, and barangay assemblies',
                         badgeText: '6 Posts',
                         badgeColor: const Color(0xFFEA580C),
                       ),
@@ -236,7 +236,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         icon: Icons.volunteer_activism_rounded,
                         title: 'Community Outreach & Environment',
                         subtitle:
-                            'Tree planting, barangay cleanups, and civic aid',
+                            'Coastal cleanup drives and summer first aid roving',
                         badgeText: '3 Posts',
                         badgeColor: const Color(0xFF059669),
                       ),
@@ -252,7 +252,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         icon: Icons.menu_book_rounded,
                         title: 'Safety Information & Advisories',
                         subtitle:
-                            'Crucial guidelines and fire safety knowledge',
+                            'Official safety tips, wiring guides, and 911 hotlines',
                         badgeText: '6 Posts',
                         badgeColor: const Color(0xFF2563EB),
                       ),
@@ -417,17 +417,18 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'OPLAN LIGTAS NA PAMAYANAN (OLP)',
+                  'OPLAN LIGTAS NA PAMAYANAN CAMPAIGN NG BFP, EPEKTIBO LABAN SA SUNOG',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                     color: Color(0xFF9A3412),
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.2,
+                    height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 const Text(
-                  'Kampanya ng BFP laban sa sunog: epektibo at maagap na paghahanda para sa isang ligtas na komunidad.',
+                  'Mas pinaigting ng Bureau of Fire Protection (BFP) Lingayen ang kanilang Oplan Ligtas na Pamayanan—isang programa na may layuning turuan at paalalahanan ang publiko gamit ang roving fire truck at public address.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Color(0xFF431407),
@@ -450,7 +451,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Read Full Campaign',
+                            'Read Full Article',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -488,33 +489,39 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
   List<Widget> _buildFireSafetyPosts() {
     final posts = [
       {
-        'title': 'Community Fire Safety Drill & Lecture',
-        'desc': 'Interactive hands-on fire drill with local residents and barangay volunteers.',
+        'title': 'Community Fire Auxiliary Group (CFAG) Activity',
+        'subtitle': '28 September 2026 | Obligasyon sa Bayan, Ligtas na Pamayanan',
+        'desc': 'BFP-Lingayen facilitated the Community Fire Auxiliary Group (CFAG) training under the “Obligasyon sa Bayan, Ligtas na Pamayanan” program.',
         'url': 'https://www.facebook.com/share/p/1e39cUa14o/',
       },
       {
-        'title': 'Fire Preparedness & Safety Demonstration',
-        'desc': 'Proper fire extinguisher operation and emergency exit protocols.',
+        'title': 'Fire Safety Lecture, Fire Drill & Earthquake Drill',
+        'subtitle': 'Baǹaan Museum, Lingayen, Pangasinan',
+        'desc': 'BFP-Lingayen Fire Station conducted a comprehensive Fire Safety Lecture, Fire Drill, and Earthquake Drill at Baǹaan Museum.',
         'url': 'https://www.facebook.com/share/p/1LuNmEuU5s/',
       },
       {
-        'title': 'Barangay Fire Readiness Inspection',
-        'desc': 'Checking community firefighting readiness and water point availability.',
+        'title': 'Fire Extinguisher Orientation and Demonstration',
+        'subtitle': '29 April 2026 | Hands-on Training',
+        'desc': 'Continuous efforts to promote fire safety awareness and community preparedness through fire extinguisher training and live demonstrations.',
         'url': 'https://www.facebook.com/share/p/1CbNfzLJf8/',
       },
       {
-        'title': 'Youth & School Fire Safety Orientation',
-        'desc': 'Empowering students and teachers with basic fire safety awareness.',
+        'title': 'Fire Safety Lecture, Drill and Inspection',
+        'subtitle': '27 March 2026 | Safety Readiness',
+        'desc': 'In line with efforts to promote safety awareness, BFP-Lingayen conducted fire safety lectures, emergency evacuation drills, and proactive inspections.',
         'url': 'https://www.facebook.com/share/p/1NCqxiYP2c/',
       },
       {
-        'title': 'Community Fire Brigade Group Training',
-        'desc': 'Equipping barangay fire volunteers with initial firefighting tactics.',
+        'title': '1st Semester Barangay Assembly — Brgy. Dulag',
+        'subtitle': '14 March 2026 | Barangay Dulag, Lingayen',
+        'desc': 'BFP-Lingayen participated in the 1st Semester Barangay Assembly at Barangay Dulag, presenting fire safety guidelines to residents.',
         'url': 'https://www.facebook.com/share/p/1DUmtkUTUD/',
       },
       {
-        'title': 'House-to-House Fire Safety Survey',
-        'desc': 'Assessing electrical hazards and providing safety tips directly to homeowners.',
+        'title': '1st Semester Barangay Assembly — Brgy. Maniboc',
+        'subtitle': '14 March 2026 | Barangay Maniboc, Lingayen',
+        'desc': 'BFP-Lingayen joined the Barangay Assembly at Barangay Maniboc, sharing crucial fire prevention measures and community defense tips.',
         'url': 'https://www.facebook.com/share/p/1JorLkkc6g/',
       },
     ];
@@ -526,6 +533,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
             icon: Icons.local_fire_department_rounded,
             iconColor: const Color(0xFFEA580C),
             title: p['title']!,
+            subtitle: p['subtitle'],
             description: p['desc']!,
             url: p['url']!,
           ),
@@ -536,18 +544,21 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
   List<Widget> _buildOutreachPosts() {
     final posts = [
       {
-        'title': 'Community Tree Planting & Greening Program',
-        'desc': 'BFP Lingayen personnel taking part in environmental sustainability initiatives.',
+        'title': 'SM Cares Coastal Clean-Up',
+        'subtitle': '07 June 2026 | Binmaley Baywalk, Pangasinan',
+        'desc': 'BFP-Lingayen actively participated in the SM Cares Coastal Clean-Up held at Binmaley Baywalk in support of environmental conservation.',
         'url': 'https://www.facebook.com/share/p/1BwEF68aQu/',
       },
       {
-        'title': 'Barangay Clean-up Drive & Fire Lane Clearing',
-        'desc': 'Ensuring unobstructed road access for fire trucks and emergency response units.',
+        'title': 'Oplan SUMVAC 2026 — First Aid Service Team (F.A.S.T.)',
+        'subtitle': '01 May 2026 | Roving and Inspection',
+        'desc': 'BFP-Lingayen remains steadfast in its commitment to public safety through the First Aid Service Team roving and inspection during vacation season.',
         'url': 'https://www.facebook.com/share/p/14rnijxwT22/',
       },
       {
-        'title': 'Civic Action & Community Relief Assistance',
-        'desc': 'BFP personnel reaching out to underserved communities in Lingayen.',
+        'title': 'Coastal Clean-Up Drive "Bumbasurero"',
+        'subtitle': '20 February 2026 | with PSU Binmaley Interns',
+        'desc': 'BFP-Lingayen personnel together with Criminology Interns of PSU Binmaley proudly led and executed the "Bumbasurero" coastal clean-up.',
         'url': 'https://www.facebook.com/share/p/1FEghNGYqY/',
       },
     ];
@@ -559,6 +570,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
             icon: Icons.eco_rounded,
             iconColor: const Color(0xFF059669),
             title: p['title']!,
+            subtitle: p['subtitle'],
             description: p['desc']!,
             url: p['url']!,
           ),
@@ -569,33 +581,39 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
   List<Widget> _buildSafetyInfoPosts() {
     final posts = [
       {
-        'title': 'LPG Safety & Leak Prevention Guide',
-        'desc': 'Vital tips for safe handling of cooking gas cylinders in residential kitchens.',
+        'title': 'Safe Wiring, Safe Home! ⚡🔥',
+        'subtitle': 'Electrical Fire Prevention Advisory',
+        'desc': 'Prevent electrical fires by using quality wiring materials, avoiding overloaded outlets, replacing damaged wires, and keeping connections safe.',
         'url': 'https://www.facebook.com/share/p/1CSz19ZTRW/',
       },
       {
-        'title': 'Electrical Fire Prevention Advisory',
-        'desc': 'Avoiding overloaded octopus outlets, worn wiring, and counterfeit breakers.',
+        'title': 'Bawal ang Pagsunog ng Damo! 🔥',
+        'subtitle': 'Wildfire & Open Burning Warning',
+        'desc': 'Ang simpleng pagsunog ng damo ay maaaring magdulot ng mabilis na pagkalat ng apoy at malaking sunog. Panatilihing malinis ang paligid sa ligtas na paraan.',
         'url': 'https://www.facebook.com/share/p/1A4vMxi8jk/',
       },
       {
-        'title': 'Home Fire Escape Plan Essentials',
-        'desc': 'Ensuring two exits per room and establishing an outside family meeting place.',
+        'title': 'Iwas Sunog, Ligtas ang Pamilya! 🏠❤️',
+        'subtitle': 'Home Fire Safety Advisory',
+        'desc': 'Maging alerto at responsable sa paggamit ng kuryente, pagluluto, LPG, at iba pang maaaring pagmulan ng sunog. Ang pag-iingat ngayon ay proteksyon bukas.',
         'url': 'https://www.facebook.com/share/p/19rzQz64JZ/',
       },
       {
-        'title': 'Dry Season Fire Precautions',
-        'desc': 'Preventing grass fires, open burning hazards, and trash incinerations.',
+        'title': '\'Wag Magsunog ng Basura! 🚫🔥',
+        'subtitle': 'Waste Burning & Fire Hazard Advisory',
+        'desc': 'Munting apoy, maaaring maging malaking sunog. Iwas sunog, ligtas ang lahat! Panatilihing malinis ang kapaligiran.',
         'url': 'https://www.facebook.com/share/p/1DQuHmQEEc/',
       },
       {
-        'title': 'Emergency Hotline & Response Protocol',
-        'desc': 'Save Lingayen BFP emergency numbers for immediate dispatch during incidents.',
+        'title': 'Iwas Sunog, Siguraduhin ang Tuyong Bubong! 🌧️🏠',
+        'subtitle': 'Rainy Season Electrical Safety',
+        'desc': 'Suriin at ayusin ang mga sirang yero upang maiwasan ang pagtagas ng tubig na maaaring makaabot sa mga kable at saksakan ng kuryente.',
         'url': 'https://www.facebook.com/share/p/1DwsE3ujGz/',
       },
       {
-        'title': 'Commercial Business Fire Safety Standards',
-        'desc': 'Compliance guide for FSIC, fire alarms, sprinklers, and emergency exits.',
+        'title': 'Kalmado. Tumawag. Lumikas. Ligtas. 🧯',
+        'subtitle': 'Emergency 911 & Evacuation Steps',
+        'desc': 'Sa oras ng sunog o emergency, 911 agad! Ibigay ang tamang lokasyon at impormasyon. Lumikas sa ligtas na lugar—huwag gumamit ng elevator!',
         'url': 'https://www.facebook.com/share/p/1CDb74Bt15/',
       },
     ];
@@ -607,6 +625,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
             icon: Icons.info_outline_rounded,
             iconColor: const Color(0xFF2563EB),
             title: p['title']!,
+            subtitle: p['subtitle'],
             description: p['desc']!,
             url: p['url']!,
           ),
@@ -619,6 +638,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
     required IconData icon,
     required Color iconColor,
     required String title,
+    String? subtitle,
     required String description,
     required String url,
   }) {
@@ -660,7 +680,8 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1877F2).withValues(alpha: 0.1),
+                              color: const Color(0xFF1877F2)
+                                  .withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Row(
@@ -696,11 +717,23 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         title,
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                           color: Color(0xFF0F172A),
+                          height: 1.25,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      if (subtitle != null && subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: iconColor,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
                       Text(
                         description,
                         style: const TextStyle(
@@ -768,9 +801,9 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
                           Text(
-                            'BFP LINGAYEN OFFICIAL PAGE',
+                            'BFP REGION 1 LINGAYEN PANGASINAN',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: 0.5,
@@ -778,7 +811,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Follow for real-time announcements & alerts',
+                            'Official Facebook Page • Your Safety, Our Priority',
                             style: TextStyle(
                               fontSize: 11,
                               color: Color(0xFF94A3B8),
@@ -790,15 +823,32 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                const Text(
-                  'Visit the official Bureau of Fire Protection Lingayen social media page for hotlines, fire safety reports, and community advisories.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFFCBD5E1),
-                    height: 1.4,
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.phone_in_talk_rounded,
+                        color: Color(0xFFF97316),
+                        size: 16,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Emergency Hotline: 0917-186-1611',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 10),
@@ -811,7 +861,7 @@ class _ProgramsActivitiesSheetState extends State<ProgramsActivitiesSheet> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Open BFP Lingayen Facebook',
+                        'Visit Official Facebook Page',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,

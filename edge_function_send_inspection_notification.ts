@@ -7,6 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Public URL for FireSight full-color app logo hosted on Supabase Storage
+const DEFAULT_APP_LOGO_URL =
+  "https://lapfwiawufudxervauzc.supabase.co/storage/v1/object/public/hazard-photos/app_assets/firesight_logo.png";
+
 // Embedded Firebase Service Account Credentials for firesight-pushnotif
 const DEFAULT_FIREBASE_SERVICE_ACCOUNT = {
   type: "service_account",
@@ -124,6 +128,25 @@ async function sendFcmMessage(projectId: string, accessToken: string, messagePay
   return { sent: true, note: fcmData.name };
 }
 
+// In-memory deduplication cache to prevent duplicate dispatches from DB triggers & concurrent calls
+const recentNotifCache = new Map<string, number>();
+
+function isRecentDuplicate(key: string, cooldownMs = 10000): boolean {
+  const now = Date.now();
+  const lastTime = recentNotifCache.get(key);
+  if (lastTime && (now - lastTime) < cooldownMs) {
+    return true;
+  }
+  recentNotifCache.set(key, now);
+  // Clean up cache entries older than 60s
+  for (const [k, timestamp] of recentNotifCache.entries()) {
+    if (now - timestamp > 60000) {
+      recentNotifCache.delete(k);
+    }
+  }
+  return false;
+}
+
 serve(async (req) => {
   // 1. Handle CORS Preflight
   if (req.method === "OPTIONS") {
@@ -154,6 +177,15 @@ serve(async (req) => {
       const priority = (body.priority || "normal").toLowerCase();
       const createdBy = body.created_by || body.createdBy || "BFP Lingayen";
 
+      const dedupeKey = `announcement_${announcementId || title}`;
+      if (isRecentDuplicate(dedupeKey, 10000)) {
+        console.log(`[Deduplication] Suppressed duplicate announcement: ${dedupeKey}`);
+        return new Response(
+          JSON.stringify({ success: true, deduped: true, message: `Duplicate suppressed for ${dedupeKey}` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
       const isUrgent = priority === "urgent";
       const notifTitle = isUrgent ? `🚨 URGENT: ${title}` : `📢 BFP Advisory: ${title}`;
       const notifBody = content.length > 140 ? `${content.substring(0, 137)}...` : content;
@@ -168,6 +200,7 @@ serve(async (req) => {
           notification: {
             title: notifTitle,
             body: notifBody,
+            image: DEFAULT_APP_LOGO_URL,
           },
           data: {
             type: "announcement",
@@ -181,8 +214,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "high_importance_channel",
-              sound: "default",
+              channel_id: "public_bulletin_channel_v3",
+              icon: "ic_notification",
+              color: "#EA580C",
+              sound: "public_chime",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
@@ -234,6 +269,19 @@ serve(async (req) => {
       const isVerified = statusLower === "verified" || statusLower === "responding" || statusLower === "dispatched";
       const isResolved = statusLower === "resolved" || statusLower === "false alarm";
 
+      const dedupeKey = `emergency_${reportId}_${statusLower}`;
+      if (isRecentDuplicate(dedupeKey, 10000)) {
+        console.log(`[Deduplication] Suppressed duplicate emergency notification for: ${dedupeKey}`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            deduped: true,
+            message: `Duplicate notification suppressed for ${dedupeKey}`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
       const accessToken = await getGoogleAccessToken(serviceAccount);
       const results: Record<string, any> = {};
 
@@ -252,6 +300,9 @@ serve(async (req) => {
         click_action: "FLUTTER_NOTIFICATION_CLICK",
       };
 
+      const emergencyImageUrl =
+        photoUrl && photoUrl.startsWith("http") ? photoUrl : DEFAULT_APP_LOGO_URL;
+
       // 1. UNVERIFIED EMERGENCY: Send ONLY to Officers
       if (isUnverified) {
         const officerTitle = `🚨 INCOMING EMERGENCY: ${incidentType.toUpperCase()}`;
@@ -262,6 +313,7 @@ serve(async (req) => {
           notification: {
             title: officerTitle,
             body: officerBody,
+            image: emergencyImageUrl,
           },
           data: {
             ...baseEmergencyData,
@@ -270,8 +322,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel",
-              sound: "default",
+              channel_id: "emergency_alarm_channel_v3",
+              icon: "ic_notification",
+              color: "#DC2626",
+              sound: "emergency_siren",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
@@ -282,7 +336,7 @@ serve(async (req) => {
 
       // 2. VERIFIED / RESPONDING EMERGENCY: Broadcast to Public AND notify Officers
       if (isVerified) {
-        // A. Public Broadcast
+        // A. Public Broadcast (to emergency_public with melodic chime sound)
         const publicTitle = `🚨 BFP EMERGENCY ALERT: ${incidentType.toUpperCase()}`;
         const publicBody = `Verified emergency in ${barangay}. BFP units responding. Stay alert & give way.`;
 
@@ -291,6 +345,7 @@ serve(async (req) => {
           notification: {
             title: publicTitle,
             body: publicBody,
+            image: emergencyImageUrl,
           },
           data: {
             ...baseEmergencyData,
@@ -299,8 +354,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel",
-              sound: "default",
+              channel_id: "public_bulletin_channel_v3",
+              icon: "ic_notification",
+              color: "#DC2626",
+              sound: "public_chime",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
@@ -308,7 +365,7 @@ serve(async (req) => {
 
         results.public = await sendFcmMessage(serviceAccount.project_id, accessToken, publicPayload);
 
-        // B. Officers Update Broadcast
+        // B. Officers Update Broadcast (to emergency_officers with siren sound)
         const officerUpdateTitle = `🚒 EMERGENCY UPDATE: ${status.toUpperCase()} (${incidentType.toUpperCase()})`;
         const officerUpdateBody = `Incident in ${barangay} updated to ${status}.`;
 
@@ -317,6 +374,7 @@ serve(async (req) => {
           notification: {
             title: officerUpdateTitle,
             body: officerUpdateBody,
+            image: emergencyImageUrl,
           },
           data: {
             ...baseEmergencyData,
@@ -325,8 +383,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel",
-              sound: "default",
+              channel_id: "emergency_alarm_channel_v3",
+              icon: "ic_notification",
+              color: "#DC2626",
+              sound: "emergency_siren",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
@@ -345,6 +405,7 @@ serve(async (req) => {
           notification: {
             title: resolvedTitle,
             body: resolvedBody,
+            image: emergencyImageUrl,
           },
           data: {
             ...baseEmergencyData,
@@ -353,8 +414,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel",
-              sound: "default",
+              channel_id: "emergency_alarm_channel_v3",
+              icon: "ic_notification",
+              color: "#DC2626",
+              sound: "emergency_siren",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
@@ -448,25 +511,35 @@ serve(async (req) => {
     const notifTitle = "🚨 New Inspection Scheduled";
     const notifBody = `Officer assigned you to inspect ${businessName || "an establishment"} (Order: ${orderNo || "N/A"}).`;
 
-    // Record In-App Notification in public.notifications table (non-blocking)
+    // Record In-App Notification in public.notifications table if not already inserted
     try {
-      const { error: notifInsertErr } = await supabaseAdmin.from("notifications").insert([
-        {
-          user_id: inspectorId,
-          title: notifTitle,
-          body: notifBody,
-          type: "inspection_scheduled",
-          data: {
-            inspection_id: inspectionId,
-            order_no: orderNo,
-            business_name: businessName,
-            address: address,
-          },
-        },
-      ]);
+      const { data: existingNotif } = await supabaseAdmin
+        .from("notifications")
+        .select("id")
+        .eq("user_id", inspectorId)
+        .eq("type", "inspection_scheduled")
+        .filter("data->>inspection_id", "eq", String(inspectionId || ""))
+        .limit(1);
 
-      if (notifInsertErr) {
-        console.warn("Notice: In-app notification insert:", notifInsertErr.message);
+      if (!existingNotif || existingNotif.length === 0) {
+        const { error: notifInsertErr } = await supabaseAdmin.from("notifications").insert([
+          {
+            user_id: inspectorId,
+            title: notifTitle,
+            body: notifBody,
+            type: "inspection_scheduled",
+            data: {
+              inspection_id: inspectionId,
+              order_no: orderNo,
+              business_name: businessName,
+              address: address,
+            },
+          },
+        ]);
+
+        if (notifInsertErr) {
+          console.warn("Notice: In-app notification insert:", notifInsertErr.message);
+        }
       }
     } catch (dbErr: any) {
       console.warn("Notice: Notifications table insert note:", dbErr?.message);
@@ -489,6 +562,7 @@ serve(async (req) => {
           notification: {
             title: notifTitle,
             body: notifBody,
+            image: DEFAULT_APP_LOGO_URL,
           },
           data: {
             inspection_id: String(inspectionId || ""),
@@ -499,8 +573,10 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "high_importance_channel",
-              sound: "default",
+              channel_id: "inspection_channel_v3",
+              icon: "ic_notification",
+              color: "#EA580C",
+              sound: "public_chime",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
             },
           },
