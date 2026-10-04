@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../active_inspection_screen.dart';
+import '../services/push_notification_service.dart';
 
 class NotificationBellButton extends StatefulWidget {
   const NotificationBellButton({super.key});
@@ -9,19 +11,43 @@ class NotificationBellButton extends StatefulWidget {
   State<NotificationBellButton> createState() => _NotificationBellButtonState();
 }
 
-class _NotificationBellButtonState extends State<NotificationBellButton> {
+class _NotificationBellButtonState extends State<NotificationBellButton>
+    with WidgetsBindingObserver {
   int _unreadCount = 0;
   RealtimeChannel? _channel;
+  Timer? _periodicTimer;
+  StreamSubscription? _pushSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchUnreadCount();
     _subscribeNotifications();
+
+    // 1. Fallback periodic sync every 15s to guarantee fresh count
+    _periodicTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _fetchUnreadCount();
+    });
+
+    // 2. Immediate sync when foreground push notification arrives
+    _pushSubscription = PushNotificationService().onNotificationReceived.listen((_) {
+      if (mounted) _fetchUnreadCount();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _fetchUnreadCount();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _periodicTimer?.cancel();
+    _pushSubscription?.cancel();
     _channel?.unsubscribe();
     super.dispose();
   }
@@ -52,18 +78,18 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
+      // Listen to all changes on notifications table; RLS automatically restricts rows to user
       _channel = Supabase.instance.client
           .channel('public:notifications:${user.id}')
           .onPostgresChanges(
             event: PostgresChangeEvent.all,
             schema: 'public',
             table: 'notifications',
-            filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'user_id',
-              value: user.id,
-            ),
             callback: (payload) {
+              final newRecord = payload.newRecord;
+              if (newRecord.isNotEmpty && newRecord['user_id'] != null) {
+                if (newRecord['user_id'] != user.id) return;
+              }
               _fetchUnreadCount();
             },
           )
@@ -129,11 +155,40 @@ class NotificationsSheet extends StatefulWidget {
 class _NotificationsSheetState extends State<NotificationsSheet> {
   bool _loading = true;
   List<Map<String, dynamic>> _notifications = [];
+  RealtimeChannel? _sheetChannel;
 
   @override
   void initState() {
     super.initState();
     _loadNotifications();
+    _subscribeSheetRealtime();
+  }
+
+  @override
+  void dispose() {
+    _sheetChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  void _subscribeSheetRealtime() {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      _sheetChannel = Supabase.instance.client
+          .channel('public:sheet_notifications:${user.id}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'notifications',
+            callback: (payload) {
+              if (mounted) _loadNotifications();
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Error subscribing sheet to notifications: $e');
+    }
   }
 
   Future<void> _loadNotifications() async {

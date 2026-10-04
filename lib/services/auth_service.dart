@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -246,7 +247,15 @@ class AuthService extends ChangeNotifier {
       throw const AuthException('Failed to sign in. User account not found.');
     }
 
-    return await refreshUserProfile();
+    final role = await refreshUserProfile();
+
+    // Synchronize FCM device push token to Supabase immediately upon sign in
+    unawaited(PushNotificationService().syncTokenToSupabase());
+    if (role != UserRole.publicGuest) {
+      unawaited(PushNotificationService().updateOfficerTopicSubscription(isOfficer: true));
+    }
+
+    return role;
   }
 
   /// Continue as public citizen guest
@@ -260,19 +269,35 @@ class AuthService extends ChangeNotifier {
 
   /// Sign out current user
   Future<void> signOut() async {
+    // 1. Immediately reset in-memory role & profile to avoid lingering state
+    _currentRole = UserRole.publicGuest;
+    _userProfile = null;
+    notifyListeners();
+
+    // 2. Clear cached persistent session
+    try {
+      await _clearCachedSession();
+    } catch (e) {
+      debugPrint('Clear cached session note: $e');
+    }
+
+    // 3. Unsubscribe from officer FCM topics & clear FCM token in profiles table
+    try {
+      await PushNotificationService().clearTokenOnLogout().timeout(const Duration(seconds: 2));
+      await PushNotificationService().updateOfficerTopicSubscription(isOfficer: false).timeout(const Duration(seconds: 2));
+    } catch (e) {
+      debugPrint('Push notification cleanup note on signout: $e');
+    }
+
+    // 4. Remote Supabase session revocation
     final client = _client;
     if (client?.auth.currentUser != null) {
       try {
-        await client?.auth.signOut();
+        await client?.auth.signOut().timeout(const Duration(seconds: 2));
       } catch (e) {
-        debugPrint('Sign out note: $e');
+        debugPrint('Supabase sign out note: $e');
       }
     }
-    _currentRole = UserRole.publicGuest;
-    _userProfile = null;
-    await PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
-    await _clearCachedSession();
-    notifyListeners();
   }
 
   /// Station Officer Admin function: Create internal staff account (fire_inspector or community_risk_officer)

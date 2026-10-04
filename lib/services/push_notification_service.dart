@@ -58,9 +58,14 @@ class PushNotificationService {
 
   bool _isInitialized = false;
   String? _fcmToken;
-  String? _pendingInspectionId;
-
   String? get fcmToken => _fcmToken;
+
+  /// Global notification stream to immediately notify UI widgets (like the bell badge)
+  final StreamController<Map<String, dynamic>> _onNotificationReceivedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get onNotificationReceived =>
+      _onNotificationReceivedController.stream;
+  String? _pendingInspectionId;
 
   /// Initialize Firebase Push Notifications & Local Notification channels
   Future<void> initialize() async {
@@ -153,6 +158,7 @@ class PushNotificationService {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Received foreground push notification: ${message.notification?.title}');
         _showLocalNotification(message);
+        _onNotificationReceivedController.add(message.data);
       });
 
       // 7. Handle notification tap when app is in background
@@ -200,9 +206,24 @@ class PushNotificationService {
   }
 
   /// Sync device FCM token to Supabase profiles table for the currently logged in user
-  Future<void> syncTokenToSupabase() async {
+  Future<void> syncTokenToSupabase({int retries = 3}) async {
     try {
-      if (_fcmToken == null || _fcmToken!.isEmpty) return;
+      if (_fcmToken == null || _fcmToken!.isEmpty) {
+        try {
+          _fcmToken = await _messaging.getToken();
+          debugPrint('Retrieved FCM Device Token: $_fcmToken');
+        } catch (tokenErr) {
+          debugPrint('Error retrieving FCM token: $tokenErr');
+        }
+      }
+
+      if (_fcmToken == null || _fcmToken!.isEmpty) {
+        if (retries > 0) {
+          debugPrint('FCM token not ready yet. Retrying in 2 seconds ($retries attempts remaining)...');
+          Future.delayed(const Duration(seconds: 2), () => syncTokenToSupabase(retries: retries - 1));
+        }
+        return;
+      }
 
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {

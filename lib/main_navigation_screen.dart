@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
+import 'services/push_notification_service.dart';
 import 'services/route_guard.dart';
 import 'fire_risk_mapping_screen.dart';
 import 'report_emergency_screen.dart';
@@ -48,6 +49,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _effectiveRole = widget.isPublicUser ? UserRole.publicGuest : widget.activeRole;
     _setupRoleNavigation();
     _fetchUserProfile();
+    if (_effectiveRole != UserRole.publicGuest) {
+      PushNotificationService().syncTokenToSupabase();
+      PushNotificationService().updateOfficerTopicSubscription(isOfficer: true);
+    }
   }
 
   void _setupRoleNavigation() {
@@ -242,14 +247,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  void _signOut() async {
-    await AuthService().signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        RouteGuard.routeLogin,
-        (route) => false,
-      );
-    }
+  void _signOut() {
+    // Immediately navigate to login to provide zero-lag user feedback
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      RouteGuard.routeLogin,
+      (route) => false,
+    );
+    // Background logout cleanup
+    AuthService().signOut();
   }
 
   @override
