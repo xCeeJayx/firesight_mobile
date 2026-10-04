@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../active_inspection_screen.dart';
+import '../firebase_options.dart';
 import '../models/emergency_report_model.dart';
 import '../screens/public/public_announcements_screen.dart';
 import '../widgets/emergency/emergency_alert_dialog.dart';
@@ -16,7 +17,11 @@ import 'emergency_service.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp();
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
   } catch (e) {
     debugPrint('Background Firebase init note: $e');
   }
@@ -63,19 +68,42 @@ class PushNotificationService {
     _isInitialized = true;
 
     try {
-      // 1. Initialize Firebase Core
-      await Firebase.initializeApp();
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      // 1. Initialize Firebase Core safely with explicit options
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+        }
+      } catch (fbInitErr) {
+        debugPrint('Firebase explicit options init note: $fbInitErr');
+        try {
+          if (Firebase.apps.isEmpty) {
+            await Firebase.initializeApp();
+          }
+        } catch (fallbackErr) {
+          debugPrint('Firebase fallback init note: $fallbackErr');
+        }
+      }
+
+      try {
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      } catch (bgErr) {
+        debugPrint('Firebase background handler note: $bgErr');
+      }
 
       // 2. Request notification permissions (required for Android 13+ and iOS)
-      final NotificationSettings settings = await _messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-
-      debugPrint('FCM Authorization status: ${settings.authorizationStatus}');
+      try {
+        final NotificationSettings settings = await _messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: false,
+        );
+        debugPrint('FCM Authorization status: ${settings.authorizationStatus}');
+      } catch (permErr) {
+        debugPrint('Permission request note: $permErr');
+      }
 
       // 3. Subscribe all devices to public announcements & verified emergency broadcasts
       try {

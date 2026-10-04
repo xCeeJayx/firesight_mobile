@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_role.dart';
@@ -13,31 +14,73 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize SQLite database factory across all platforms (Web, Desktop, Mobile)
-  initializeDatabaseFactory();
+  // Global Flutter error catching to prevent black screen on uncaught exceptions
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('Flutter Error: ${details.exception}');
+  };
 
-  // Supabase standard local storage initialization
-  await Supabase.initialize(
-    url: 'https://lapfwiawufudxervauzc.supabase.co',
-    anonKey: 'sb_publishable_6M90oMjDOdT5oXqzKpbZug_JJOO4U2k',
-  );
+  // 1. Initialize local SQLite database factory
+  try {
+    initializeDatabaseFactory();
+  } catch (e) {
+    debugPrint('DB Factory initialization error: $e');
+  }
 
-  // Initialize offline SQLite DB & sync queue
-  await OfflineSyncService().database;
+  // 2. Supabase standard local storage initialization
+  try {
+    await Supabase.initialize(
+      url: 'https://lapfwiawufudxervauzc.supabase.co',
+      anonKey: 'sb_publishable_6M90oMjDOdT5oXqzKpbZug_JJOO4U2k',
+    );
+  } catch (e) {
+    debugPrint('Supabase client initialization error: $e');
+  }
 
-  // Initialize connectivity monitor
-  ConnectivityService().initialize();
+  // 3. Restore cached offline profile quickly for initial routing
+  try {
+    await AuthService().initialize();
+  } catch (e) {
+    debugPrint('AuthService initialization error: $e');
+  }
 
-  // Initialize Auth & restore cached offline profile
-  await AuthService().initialize();
-
-  // Initialize Emergency Report real-time subscription & state
-  await EmergencyService().initialize();
-
-  // Initialize Push Notifications (FCM & Local Notifications)
-  await PushNotificationService().initialize();
-
+  // 4. Mount and paint the Flutter UI IMMEDIATELY so screen is never black/frozen
   runApp(const FireSightApp());
+
+  // 5. Initialize network and background services asynchronously without blocking UI paint
+  _initializeBackgroundServices();
+}
+
+void _initializeBackgroundServices() {
+  Future.microtask(() async {
+    // Initialize offline SQLite DB & sync queue
+    try {
+      await OfflineSyncService().database;
+    } catch (e) {
+      debugPrint('OfflineSyncService init note: $e');
+    }
+
+    // Initialize connectivity monitor
+    try {
+      ConnectivityService().initialize();
+    } catch (e) {
+      debugPrint('ConnectivityService init note: $e');
+    }
+
+    // Initialize Emergency Report real-time subscription & state
+    try {
+      await EmergencyService().initialize();
+    } catch (e) {
+      debugPrint('EmergencyService init note: $e');
+    }
+
+    // Initialize Push Notifications (FCM & Local Notifications)
+    try {
+      await PushNotificationService().initialize();
+    } catch (e) {
+      debugPrint('PushNotificationService init note: $e');
+    }
+  });
 }
 
 class FireSightApp extends StatelessWidget {
