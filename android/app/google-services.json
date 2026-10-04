@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "897866731754",
+    "project_id": "firesight-pushnotif",
+    "storage_bucket": "firesight-pushnotif.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:897866731754:android:0f0213f9d2e3f10c82c793",
+        "android_client_info": {
+          "package_name": "com.example.firesight_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpeG4PASpsnFNu5cEiv1QygaikvKNpKOM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

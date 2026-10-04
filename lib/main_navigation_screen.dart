@@ -16,6 +16,7 @@ import 'screens/fire_inspector/fire_inspector_dashboard_screen.dart';
 import 'screens/fire_inspector/inspection_hub_screen.dart';
 import 'screens/fire_inspector/establishment_directory_screen.dart';
 import 'screens/fire_inspector/inspector_reports_screen.dart';
+import 'widgets/notifications_sheet.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final UserRole activeRole;
@@ -329,12 +330,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 style: TextStyle(color: Color(0xFFD84315), fontWeight: FontWeight.bold, fontSize: 13),
               ),
             )
-          else
+          else ...[
+            const NotificationBellButton(),
             IconButton(
               icon: const Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 22),
               onPressed: _signOut,
               tooltip: 'Sign Out',
             ),
+          ],
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(

@@ -6,6 +6,7 @@ import 'services/connectivity_service.dart';
 import 'services/db_initializer.dart';
 import 'services/emergency_service.dart';
 import 'services/offline_sync_service.dart';
+import 'services/push_notification_service.dart';
 import 'services/route_guard.dart';
 import 'theme/app_theme.dart';
 
@@ -32,6 +33,9 @@ Future<void> main() async {
 
   // Initialize Emergency Report real-time subscription & state
   await EmergencyService().initialize();
+
+  // Initialize Push Notifications (FCM & Local Notifications)
+  await PushNotificationService().initialize();
 
   runApp(const FireSightApp());
 }

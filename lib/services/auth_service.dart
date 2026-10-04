@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_role.dart';
 import 'offline_sync_service.dart';
+import 'push_notification_service.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
@@ -47,6 +48,7 @@ class AuthService extends ChangeNotifier {
         if (_client?.auth.currentUser == null) {
           _currentRole = UserRole.publicGuest;
           _userProfile = null;
+          await PushNotificationService().clearTokenOnLogout();
           await _clearCachedSession();
           notifyListeners();
         }
@@ -54,6 +56,7 @@ class AuthService extends ChangeNotifier {
           event == AuthChangeEvent.tokenRefreshed ||
           event == AuthChangeEvent.initialSession) {
         await refreshUserProfile();
+        await PushNotificationService().syncTokenToSupabase();
       }
     });
   }
