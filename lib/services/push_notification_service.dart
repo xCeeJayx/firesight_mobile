@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../active_inspection_screen.dart';
 import '../firebase_options.dart';
 import '../models/emergency_report_model.dart';
+import '../models/user_role.dart';
 import '../screens/public/public_announcements_screen.dart';
 import '../widgets/emergency/emergency_alert_dialog.dart';
+import 'auth_service.dart';
 import 'emergency_service.dart';
 
 /// Top-level background message handler required by Firebase Messaging
@@ -55,7 +59,7 @@ class PushNotificationService {
 
   /// Channel 1: Critical Emergency Alarms (Officers & Critical Incidents) with loud siren sound
   static const AndroidNotificationChannel _emergencyChannel = AndroidNotificationChannel(
-    'emergency_alarm_channel_v3',
+    'emergency_alarm_channel_v4',
     '🚨 Critical Emergency Alerts',
     description: 'High-priority critical emergency incident alarms with loud siren sound & continuous vibration',
     importance: Importance.max,
@@ -66,7 +70,7 @@ class PushNotificationService {
 
   /// Channel 2: Public Bulletins, Advisories & Announcements with crisp melodic chime sound
   static const AndroidNotificationChannel _publicBulletinChannel = AndroidNotificationChannel(
-    'public_bulletin_channel_v3',
+    'public_bulletin_channel_v4',
     '📢 Public Bulletins & Advisories',
     description: 'Public safety advisories, community bulletins, and public emergency broadcasts',
     importance: Importance.max,
@@ -77,7 +81,7 @@ class PushNotificationService {
 
   /// Channel 3: Inspection Advisories for assigned personnel
   static const AndroidNotificationChannel _inspectionChannel = AndroidNotificationChannel(
-    'inspection_channel_v3',
+    'inspection_channel_v4',
     'Inspection Advisories',
     description: 'Notifications for newly assigned inspections',
     importance: Importance.max,
@@ -85,6 +89,44 @@ class PushNotificationService {
     sound: RawResourceAndroidNotificationSound('public_chime'),
     enableVibration: true,
   );
+
+  AudioPlayer? _alertChimePlayer;
+
+  /// Plays crisp melodic chime sound and haptic pulse for in-app alert dialogs
+  Future<void> playAlertChime() async {
+    try {
+      _alertChimePlayer?.dispose();
+      _alertChimePlayer = AudioPlayer();
+      await _alertChimePlayer!.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: true,
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.notification,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.ambient,
+            options: {
+              AVAudioSessionOptions.duckOthers,
+              AVAudioSessionOptions.defaultToSpeaker,
+            },
+          ),
+        ),
+      );
+      await _alertChimePlayer!.setVolume(1.0);
+      try {
+        await _alertChimePlayer!.play(AssetSource('audio/public_chime.wav'));
+      } catch (assetErr) {
+        debugPrint('playAlertChime AssetSource error: $assetErr');
+      }
+      try {
+        HapticFeedback.mediumImpact();
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('Error playing alert chime: $e');
+    }
+  }
 
   bool _isInitialized = false;
   String? _fcmToken;
@@ -143,12 +185,14 @@ class PushNotificationService {
         debugPrint('Permission request note: $permErr');
       }
 
-      // 3. Initial subscription to public topics
+      // 3. Initial subscription based on active user role
       try {
         await _messaging.subscribeToTopic('public_announcements');
-        await _messaging.subscribeToTopic('emergency_public');
-        await _messaging.unsubscribeFromTopic('emergency_officers');
-        debugPrint('Subscribed to initial public FCM topics: public_announcements, emergency_public');
+        final isStaff = AuthService().isAuthenticated ||
+            (Supabase.instance.client.auth.currentUser != null) ||
+            (AuthService().currentRole != UserRole.publicGuest);
+        await updateOfficerTopicSubscription(isOfficer: isStaff);
+        debugPrint('Initial FCM topic subscription set: isOfficer=$isStaff');
       } catch (topicErr) {
         debugPrint('FCM topic subscription note: $topicErr');
       }
@@ -180,10 +224,13 @@ class PushNotificationService {
       await androidPlugin?.createNotificationChannel(_publicBulletinChannel);
       await androidPlugin?.createNotificationChannel(_inspectionChannel);
 
-      // Clean up deprecated v1/v2 channels
+      // Clean up deprecated channels
       try {
         await androidPlugin?.deleteNotificationChannel(channelId: 'emergency_alarm_channel');
         await androidPlugin?.deleteNotificationChannel(channelId: 'high_importance_channel');
+        await androidPlugin?.deleteNotificationChannel(channelId: 'emergency_alarm_channel_v3');
+        await androidPlugin?.deleteNotificationChannel(channelId: 'public_bulletin_channel_v3');
+        await androidPlugin?.deleteNotificationChannel(channelId: 'inspection_channel_v3');
       } catch (_) {}
 
       // 5. Retrieve and store device FCM token
@@ -346,7 +393,6 @@ class PushNotificationService {
       importance: Importance.max,
       priority: Priority.max,
       icon: '@drawable/ic_notification',
-      largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
       color: isEmergency ? const Color(0xFFDC2626) : const Color(0xFFEA580C),
       playSound: true,
       sound: RawResourceAndroidNotificationSound(
@@ -428,6 +474,7 @@ class PushNotificationService {
 
   /// Display in-app alert dialog for scheduled inspection assignments in foreground
   void _showInspectionAlertDialog(Map<String, dynamic> data, String inspectionId) {
+    playAlertChime();
     final businessName = data['business_name']?.toString() ??
         data['establishment_name']?.toString() ??
         data['title']?.toString() ??
@@ -627,6 +674,7 @@ class PushNotificationService {
 
   /// Display announcement bulletin dialog
   void _handleAnnouncementData(Map<String, dynamic> data) {
+    playAlertChime();
     final title = data['title']?.toString() ?? 'BFP Public Safety Bulletin';
     final content = data['content']?.toString() ?? '';
     final priority = data['priority']?.toString() ?? 'normal';

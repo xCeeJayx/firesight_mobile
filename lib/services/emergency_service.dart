@@ -42,6 +42,13 @@ class EmergencyService {
     _subscribeToRealtime();
   }
 
+  /// Re-subscribe to realtime channel (e.g. after user signs in)
+  void resubscribeRealtime() {
+    debugPrint('Resubscribing to emergency_reports realtime stream...');
+    _subscribeToRealtime();
+    fetchReports();
+  }
+
   /// Subscribe to Postgres changes on public.emergency_reports
   void _subscribeToRealtime() {
     try {
@@ -56,7 +63,9 @@ class EmergencyService {
               _handleRealtimePayload(payload);
             },
           )
-          .subscribe();
+          .subscribe((status, [error]) {
+            debugPrint('Realtime emergency_reports channel status: $status, error: $error');
+          });
 
       debugPrint('Supabase Realtime Channel subscribed to public:emergency_reports');
     } catch (e) {
@@ -143,10 +152,12 @@ class EmergencyService {
     bool isNew = true,
     String? customTitle,
   }) {
-    final currentRole = AuthService().currentRole;
+    final isStaff = AuthService().isAuthenticated ||
+        (_client.auth.currentUser != null) ||
+        (AuthService().currentRole != UserRole.publicGuest);
 
     // Public Guest users should ONLY receive verified emergency alerts
-    if (currentRole == UserRole.publicGuest && !report.isVerified) {
+    if (!isStaff && !report.isVerified) {
       debugPrint('Skipping emergency popup for public user: report ${report.id} is unverified (status: ${report.status})');
       return;
     }
@@ -156,20 +167,27 @@ class EmergencyService {
     _recentlyAlertedIds.add(report.id);
     Future.delayed(const Duration(seconds: 10), () => _recentlyAlertedIds.remove(report.id));
 
-    final context = navigatorKey.currentContext;
-    if (context == null) {
-      debugPrint('Navigator context unavailable for emergency popup alert');
-      return;
-    }
-
     // Schedule modal presentation on next frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (navigatorKey.currentContext != null) {
+      final activeContext = navigatorKey.currentContext;
+      if (activeContext != null) {
         EmergencyAlertDialog.show(
-          navigatorKey.currentContext!,
+          activeContext,
           report,
           alertTitle: customTitle ?? (isNew ? 'Incoming Emergency Report' : 'Verified Emergency Alert'),
         );
+      } else {
+        // Fallback: Retry shortly if context was momentarily unmounted
+        Future.delayed(const Duration(milliseconds: 350), () {
+          final delayedContext = navigatorKey.currentContext;
+          if (delayedContext != null) {
+            EmergencyAlertDialog.show(
+              delayedContext,
+              report,
+              alertTitle: customTitle ?? (isNew ? 'Incoming Emergency Report' : 'Verified Emergency Alert'),
+            );
+          }
+        });
       }
     });
   }

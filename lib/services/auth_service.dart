@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_role.dart';
+import 'emergency_service.dart';
 import 'offline_sync_service.dart';
 import 'push_notification_service.dart';
 
@@ -29,6 +30,13 @@ class AuthService extends ChangeNotifier {
   UserRole get currentRole => _currentRole;
   Map<String, dynamic>? get userProfile => _userProfile;
   bool get isAuthenticated => _currentRole != UserRole.publicGuest;
+
+  void setEffectiveRoleForSession(UserRole role) {
+    if (role != UserRole.publicGuest) {
+      _currentRole = role;
+      notifyListeners();
+    }
+  }
 
   /// Keys for secure local storage caching
   static const String _keyCachedRole = 'firesight_cached_role';
@@ -62,6 +70,7 @@ class AuthService extends ChangeNotifier {
         await PushNotificationService().updateOfficerTopicSubscription(
           isOfficer: _currentRole != UserRole.publicGuest,
         );
+        EmergencyService().resubscribeRealtime();
       }
     });
   }

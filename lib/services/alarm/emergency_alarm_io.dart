@@ -29,10 +29,33 @@ class EmergencyAlarmPlatformIO implements EmergencyAlarmPlatform {
     try {
       _audioPlayer?.dispose();
       _audioPlayer = AudioPlayer();
+      await _audioPlayer!.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: true,
+            stayAwake: true,
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.alarm,
+            audioFocus: AndroidAudioFocus.gainTransient,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+            options: {
+              AVAudioSessionOptions.duckOthers,
+              AVAudioSessionOptions.defaultToSpeaker,
+            },
+          ),
+        ),
+      );
       await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
       await _audioPlayer!.setVolume(1.0);
-      final wavBytes = SirenSoundGenerator.getSirenWavBytes();
-      await _audioPlayer!.play(BytesSource(wavBytes));
+      try {
+        await _audioPlayer!.play(AssetSource('audio/emergency_siren.wav'));
+      } catch (assetErr) {
+        debugPrint('🚨 [EmergencyAlarm] AssetSource fallback to synthetic wav: $assetErr');
+        final wavBytes = SirenSoundGenerator.getSirenWavBytes();
+        await _audioPlayer!.play(BytesSource(wavBytes));
+      }
     } catch (e) {
       debugPrint('🚨 [EmergencyAlarm] Audio play fallback: $e');
       _startFallbackSound();

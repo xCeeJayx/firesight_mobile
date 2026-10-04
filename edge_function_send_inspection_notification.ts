@@ -200,7 +200,6 @@ serve(async (req) => {
           notification: {
             title: notifTitle,
             body: notifBody,
-            image: DEFAULT_APP_LOGO_URL,
           },
           data: {
             type: "announcement",
@@ -214,7 +213,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "public_bulletin_channel_v3",
+              channel_id: "public_bulletin_channel_v4",
               icon: "ic_notification",
               color: "#EA580C",
               sound: "public_chime",
@@ -300,8 +299,11 @@ serve(async (req) => {
         click_action: "FLUTTER_NOTIFICATION_CLICK",
       };
 
-      const emergencyImageUrl =
-        photoUrl && photoUrl.startsWith("http") ? photoUrl : DEFAULT_APP_LOGO_URL;
+      const hasRealPhoto =
+        Boolean(photoUrl &&
+        photoUrl.startsWith("http") &&
+        !photoUrl.includes("app_assets") &&
+        !photoUrl.includes("firesight_logo"));
 
       // 1. UNVERIFIED EMERGENCY: Send ONLY to Officers
       if (isUnverified) {
@@ -313,7 +315,7 @@ serve(async (req) => {
           notification: {
             title: officerTitle,
             body: officerBody,
-            image: emergencyImageUrl,
+            ...(hasRealPhoto ? { image: photoUrl } : {}),
           },
           data: {
             ...baseEmergencyData,
@@ -322,7 +324,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel_v3",
+              channel_id: "emergency_alarm_channel_v4",
               icon: "ic_notification",
               color: "#DC2626",
               sound: "emergency_siren",
@@ -345,7 +347,7 @@ serve(async (req) => {
           notification: {
             title: publicTitle,
             body: publicBody,
-            image: emergencyImageUrl,
+            ...(hasRealPhoto ? { image: photoUrl } : {}),
           },
           data: {
             ...baseEmergencyData,
@@ -354,7 +356,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "public_bulletin_channel_v3",
+              channel_id: "public_bulletin_channel_v4",
               icon: "ic_notification",
               color: "#DC2626",
               sound: "public_chime",
@@ -374,7 +376,7 @@ serve(async (req) => {
           notification: {
             title: officerUpdateTitle,
             body: officerUpdateBody,
-            image: emergencyImageUrl,
+            ...(hasRealPhoto ? { image: photoUrl } : {}),
           },
           data: {
             ...baseEmergencyData,
@@ -383,7 +385,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel_v3",
+              channel_id: "emergency_alarm_channel_v4",
               icon: "ic_notification",
               color: "#DC2626",
               sound: "emergency_siren",
@@ -405,7 +407,7 @@ serve(async (req) => {
           notification: {
             title: resolvedTitle,
             body: resolvedBody,
-            image: emergencyImageUrl,
+            ...(hasRealPhoto ? { image: photoUrl } : {}),
           },
           data: {
             ...baseEmergencyData,
@@ -414,7 +416,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "emergency_alarm_channel_v3",
+              channel_id: "emergency_alarm_channel_v4",
               icon: "ic_notification",
               color: "#DC2626",
               sound: "emergency_siren",
@@ -562,7 +564,6 @@ serve(async (req) => {
           notification: {
             title: notifTitle,
             body: notifBody,
-            image: DEFAULT_APP_LOGO_URL,
           },
           data: {
             inspection_id: String(inspectionId || ""),
@@ -573,7 +574,7 @@ serve(async (req) => {
           android: {
             priority: "HIGH",
             notification: {
-              channel_id: "inspection_channel_v3",
+              channel_id: "inspection_channel_v4",
               icon: "ic_notification",
               color: "#EA580C",
               sound: "public_chime",

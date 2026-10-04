@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
+import 'services/emergency_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/route_guard.dart';
 import 'fire_risk_mapping_screen.dart';
@@ -50,8 +51,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _setupRoleNavigation();
     _fetchUserProfile();
     if (_effectiveRole != UserRole.publicGuest) {
+      AuthService().setEffectiveRoleForSession(_effectiveRole);
       PushNotificationService().syncTokenToSupabase();
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: true);
+      EmergencyService().resubscribeRealtime();
     } else {
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     }
