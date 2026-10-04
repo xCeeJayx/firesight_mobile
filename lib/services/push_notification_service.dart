@@ -33,7 +33,25 @@ class PushNotificationService {
   factory PushNotificationService() => _instance;
   PushNotificationService._internal();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _messagingInstance;
+  FirebaseMessaging get _messaging {
+    _messagingInstance ??= FirebaseMessaging.instance;
+    return _messagingInstance!;
+  }
+
+  /// Ensure Firebase Core is initialized before any messaging operation
+  Future<void> ensureFirebaseInitialized() async {
+    if (Firebase.apps.isEmpty) {
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (e) {
+        debugPrint('Firebase ensureInitialized note: $e');
+      }
+    }
+  }
+
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
   /// Channel 1: Standard high importance for inspections & announcements
@@ -121,7 +139,7 @@ class PushNotificationService {
 
       // 4. Initialize Local Notifications for foreground heads-up display
       const AndroidInitializationSettings androidSettings =
-          AndroidInitializationSettings('@mipmap/launcher_icon');
+          AndroidInitializationSettings('@drawable/ic_notification');
       const InitializationSettings initSettings = InitializationSettings(android: androidSettings);
 
       await _localNotifications.initialize(
@@ -182,6 +200,18 @@ class PushNotificationService {
   /// Subscribe or unsubscribe from officer emergency topics based on user role
   Future<void> updateOfficerTopicSubscription({required bool isOfficer}) async {
     try {
+      await ensureFirebaseInitialized();
+      if (Firebase.apps.isEmpty) return;
+
+      // Always guarantee subscription to public bulletins and verified emergency broadcasts
+      try {
+        await _messaging.subscribeToTopic('public_announcements');
+        await _messaging.subscribeToTopic('emergency_public');
+        debugPrint('Device subscribed to public FCM topics: public_announcements, emergency_public');
+      } catch (pubErr) {
+        debugPrint('Public topic subscription note: $pubErr');
+      }
+
       if (isOfficer) {
         await _messaging.subscribeToTopic('emergency_officers');
         debugPrint('Officer logged in: Subscribed to FCM topic: emergency_officers');
@@ -197,6 +227,9 @@ class PushNotificationService {
   /// Retrieve current FCM token
   Future<void> _fetchAndSyncToken() async {
     try {
+      await ensureFirebaseInitialized();
+      if (Firebase.apps.isEmpty) return;
+
       _fcmToken = await _messaging.getToken();
       debugPrint('FCM Device Token: $_fcmToken');
       await syncTokenToSupabase();
@@ -208,6 +241,9 @@ class PushNotificationService {
   /// Sync device FCM token to Supabase profiles table for the currently logged in user
   Future<void> syncTokenToSupabase({int retries = 3}) async {
     try {
+      await ensureFirebaseInitialized();
+      if (Firebase.apps.isEmpty) return;
+
       if (_fcmToken == null || _fcmToken!.isEmpty) {
         try {
           _fcmToken = await _messaging.getToken();
@@ -273,7 +309,7 @@ class PushNotificationService {
           isEmergency ? _emergencyChannel.description : _highImportanceChannel.description,
       importance: Importance.max,
       priority: Priority.max,
-      icon: '@mipmap/launcher_icon',
+      icon: '@drawable/ic_notification',
       color: isEmergency ? const Color(0xFFDC2626) : const Color(0xFFD84315),
       playSound: true,
       enableVibration: true,

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'firebase_options.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
@@ -20,7 +22,16 @@ Future<void> main() async {
     debugPrint('Flutter Error: ${details.exception}');
   };
 
-  // 1. Initialize local SQLite database factory
+  // 1. Initialize Firebase Core safely with explicit platform options
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase Core initialization error: $e');
+  }
+
+  // 2. Initialize local SQLite database factory
   try {
     initializeDatabaseFactory();
   } catch (e) {

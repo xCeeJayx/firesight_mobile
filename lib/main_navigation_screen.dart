@@ -52,6 +52,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (_effectiveRole != UserRole.publicGuest) {
       PushNotificationService().syncTokenToSupabase();
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: true);
+    } else {
+      PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     }
   }
 
@@ -271,13 +273,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: isGuest
-                  ? const Color(0xFFDC2626).withValues(alpha: 0.15)
-                  : const Color(0xFFD84315).withValues(alpha: 0.15),
-              child: Icon(
-                isGuest ? Icons.person_pin_circle_rounded : Icons.person_pin_rounded,
-                color: isGuest ? const Color(0xFFDC2626) : const Color(0xFFD84315),
-                size: 26,
+              backgroundColor: Colors.white,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/bfp_logo.png',
+                  width: 38,
+                  height: 38,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -334,13 +337,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
         actions: [
           if (isGuest) ...[
-            IconButton(
-              icon: const Icon(Icons.campaign_outlined, color: Color(0xFFD84315), size: 24),
-              onPressed: () {
-                setState(() => _currentIndex = 1);
-              },
-              tooltip: 'BFP Public Announcements',
-            ),
             TextButton.icon(
               onPressed: _signOut,
               icon: const Icon(Icons.login_rounded, size: 18, color: Color(0xFFD84315)),

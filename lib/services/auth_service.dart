@@ -249,10 +249,14 @@ class AuthService extends ChangeNotifier {
 
     final role = await refreshUserProfile();
 
-    // Synchronize FCM device push token to Supabase immediately upon sign in
-    unawaited(PushNotificationService().syncTokenToSupabase());
-    if (role != UserRole.publicGuest) {
-      unawaited(PushNotificationService().updateOfficerTopicSubscription(isOfficer: true));
+    // Synchronize FCM device push token to Supabase safely without blocking auth
+    try {
+      unawaited(PushNotificationService().syncTokenToSupabase());
+      if (role != UserRole.publicGuest) {
+        unawaited(PushNotificationService().updateOfficerTopicSubscription(isOfficer: true));
+      }
+    } catch (e) {
+      debugPrint('Post sign-in push notification setup note: $e');
     }
 
     return role;
@@ -262,7 +266,11 @@ class AuthService extends ChangeNotifier {
   void setGuestMode() {
     _currentRole = UserRole.publicGuest;
     _userProfile = null;
-    PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
+    try {
+      PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
+    } catch (e) {
+      debugPrint('Guest mode topic subscription note: $e');
+    }
     _clearCachedSession();
     notifyListeners();
   }

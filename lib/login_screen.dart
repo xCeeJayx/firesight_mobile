@@ -64,7 +64,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _navigateToGuestMode() {
-    AuthService().setGuestMode();
+    try {
+      AuthService().setGuestMode();
+    } catch (e) {
+      debugPrint('Guest mode setup note: $e');
+    }
     Navigator.of(context).pushReplacementNamed(UserRole.publicGuest.defaultRoute);
   }
 
@@ -127,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Header & Branding Section
                       Container(
-                        padding: const EdgeInsets.all(18),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.white,
@@ -143,13 +147,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.local_fire_department_rounded,
-                          color: Color(0xFFEA580C),
-                          size: 52,
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/bfp_logo.png',
+                            width: 96,
+                            height: 96,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       const Text(
                         'FireSight',
                         style: TextStyle(
