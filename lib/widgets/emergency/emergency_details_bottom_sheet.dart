@@ -43,11 +43,62 @@ class EmergencyDetailsBottomSheet extends StatefulWidget {
 class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomSheet> {
   late EmergencyReportModel _report;
   bool _isUpdatingStatus = false;
+  bool _isSeparating = false;
 
   @override
   void initState() {
     super.initState();
     _report = widget.report;
+  }
+
+  Future<void> _separateReport() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Separate Emergency Report?'),
+        content: const Text(
+          'This will detach this report from its parent incident and restore it as an independent emergency ticket.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Separate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSeparating = true);
+    final success = await EmergencyService().separateReport(_report.id, _report.parentIncidentId);
+    if (mounted) {
+      setState(() {
+        _isSeparating = false;
+        if (success) {
+          _report = _report.copyWith(parentIncidentId: null);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success ? 'Report separated into an independent incident.' : 'Failed to separate report.',
+          ),
+          backgroundColor: success ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _launchPhoneCall(String phoneNumber) async {
@@ -338,6 +389,145 @@ class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomShee
                     ),
                   ),
 
+                  // Grouping & Jurisdiction Status Indicators
+                  if (_report.hasSupportingReports) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.merge_type_rounded, color: Color(0xFF2563EB), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Parent Incident | ${_report.supportingReportsCount} Supporting Report(s) linked',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (_report.isSupportingReport) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.link_rounded, color: Color(0xFF475569), size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Supporting Report (Grouped)',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF334155),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'This report was auto-merged under an active parent incident.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+                          ),
+                          if (isStaff) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _isSeparating ? null : _separateReport,
+                              icon: _isSeparating
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.call_split_rounded, size: 16),
+                              label: const Text('Separate Report', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFDC2626),
+                                side: const BorderSide(color: Color(0xFFF87171)),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (_report.isOutDistrict) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFED7AA)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Icon(Icons.location_off_rounded, color: Color(0xFFEA580C), size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Outside Lingayen Jurisdiction: Transmitted for referral and coordination with Unified 911 / external units.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFC2410C),
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (_report.isFlaggedSuspicious) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.shield_outlined, color: Color(0xFFDC2626), size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Flagged for Verification: High report frequency detected from this device/account.',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
 
                   // Description
@@ -576,6 +766,38 @@ class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomShee
                             );
                           },
                         ),
+                      ),
+                    ),
+                  ],
+
+                  if (!hasPhoto && _report.photoUnsafe) ...[
+                    const SizedBox(height: 16),
+                    _buildSectionTitle('Incident Evidence Status'),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.health_and_safety_rounded, color: Color(0xFFDC2626), size: 24),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Safety Bypass Active: Reporter stated capturing live photo evidence would place them in immediate danger or evacuation.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Color(0xFF991B1B),
+                                fontWeight: FontWeight.w600,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

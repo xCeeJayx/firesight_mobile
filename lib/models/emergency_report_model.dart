@@ -14,6 +14,12 @@ class EmergencyReportModel {
   final String? photoUrl;
   final String status;
   final DateTime? createdAt;
+  final String? parentIncidentId;
+  final int supportingReportsCount;
+  final bool isOutOfJurisdiction;
+  final bool photoUnsafe;
+  final String? deviceId;
+  final bool isFlaggedSuspicious;
 
   const EmergencyReportModel({
     required this.id,
@@ -28,6 +34,12 @@ class EmergencyReportModel {
     this.photoUrl,
     this.status = 'Unverified',
     this.createdAt,
+    this.parentIncidentId,
+    this.supportingReportsCount = 0,
+    this.isOutOfJurisdiction = false,
+    this.photoUnsafe = false,
+    this.deviceId,
+    this.isFlaggedSuspicious = false,
   });
 
   factory EmergencyReportModel.fromJson(Map<String, dynamic> json) {
@@ -56,6 +68,12 @@ class EmergencyReportModel {
       photoUrl: json['photo_url']?.toString(),
       status: json['status']?.toString() ?? 'Unverified',
       createdAt: parseDate(json['created_at']),
+      parentIncidentId: json['parent_incident_id']?.toString(),
+      supportingReportsCount: (json['supporting_reports_count'] as num?)?.toInt() ?? 0,
+      isOutOfJurisdiction: json['is_out_of_jurisdiction'] == true,
+      photoUnsafe: json['photo_unsafe'] == true,
+      deviceId: json['device_id']?.toString(),
+      isFlaggedSuspicious: json['is_flagged_suspicious'] == true,
     );
   }
 
@@ -73,6 +91,12 @@ class EmergencyReportModel {
       'photo_url': photoUrl,
       'status': status,
       'created_at': createdAt?.toIso8601String(),
+      'parent_incident_id': parentIncidentId,
+      'supporting_reports_count': supportingReportsCount,
+      'is_out_of_jurisdiction': isOutOfJurisdiction,
+      'photo_unsafe': photoUnsafe,
+      'device_id': deviceId,
+      'is_flagged_suspicious': isFlaggedSuspicious,
     };
   }
 
@@ -89,6 +113,12 @@ class EmergencyReportModel {
     String? photoUrl,
     String? status,
     DateTime? createdAt,
+    String? parentIncidentId,
+    int? supportingReportsCount,
+    bool? isOutOfJurisdiction,
+    bool? photoUnsafe,
+    String? deviceId,
+    bool? isFlaggedSuspicious,
   }) {
     return EmergencyReportModel(
       id: id ?? this.id,
@@ -103,6 +133,12 @@ class EmergencyReportModel {
       photoUrl: photoUrl ?? this.photoUrl,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      parentIncidentId: parentIncidentId ?? this.parentIncidentId,
+      supportingReportsCount: supportingReportsCount ?? this.supportingReportsCount,
+      isOutOfJurisdiction: isOutOfJurisdiction ?? this.isOutOfJurisdiction,
+      photoUnsafe: photoUnsafe ?? this.photoUnsafe,
+      deviceId: deviceId ?? this.deviceId,
+      isFlaggedSuspicious: isFlaggedSuspicious ?? this.isFlaggedSuspicious,
     );
   }
 
@@ -183,6 +219,8 @@ class EmergencyReportModel {
         return const Color(0xFFE0E7FF); // Light indigo
       case 'false alarm':
         return const Color(0xFFF1F5F9); // Light slate
+      case 'out-of-jurisdiction':
+        return const Color(0xFFFFF7ED); // Warm orange tint
       case 'unverified':
       default:
         return const Color(0xFFFEE2E2); // Light red
@@ -201,6 +239,8 @@ class EmergencyReportModel {
         return const Color(0xFF4338CA); // Indigo
       case 'false alarm':
         return const Color(0xFF64748B); // Slate
+      case 'out-of-jurisdiction':
+        return const Color(0xFFC2410C); // Dark orange
       case 'unverified':
       default:
         return const Color(0xFFDC2626); // Red
@@ -216,4 +256,8 @@ class EmergencyReportModel {
     final s = status.toLowerCase();
     return s == 'verified' || s == 'responding' || s == 'dispatched';
   }
+
+  bool get isOutDistrict => isOutOfJurisdiction || status.toLowerCase() == 'out-of-jurisdiction';
+  bool get hasSupportingReports => supportingReportsCount > 0;
+  bool get isSupportingReport => parentIncidentId != null && parentIncidentId!.isNotEmpty;
 }

@@ -241,6 +241,44 @@ class EmergencyService {
     }
   }
 
+  /// Separate a supporting report from its parent incident (Web Admin / Officer action)
+  Future<bool> separateReport(String reportId, String? parentIncidentId) async {
+    try {
+      await _client
+          .from('emergency_reports')
+          .update({'parent_incident_id': null, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', reportId);
+
+      if (parentIncidentId != null && parentIncidentId.isNotEmpty) {
+        // Decrement parent supporting count if > 0
+        final parentRes = await _client
+            .from('emergency_reports')
+            .select('supporting_reports_count')
+            .eq('id', parentIncidentId)
+            .maybeSingle();
+
+        if (parentRes != null) {
+          final count = (parentRes['supporting_reports_count'] as num?)?.toInt() ?? 0;
+          if (count > 0) {
+            await _client
+                .from('emergency_reports')
+                .update({
+                  'supporting_reports_count': count - 1,
+                  'updated_at': DateTime.now().toIso8601String(),
+                })
+                .eq('id', parentIncidentId);
+          }
+        }
+      }
+
+      await fetchReports();
+      return true;
+    } catch (e) {
+      debugPrint('Error separating report from parent: $e');
+      return false;
+    }
+  }
+
   /// Dispose service resources
   void dispose() {
     _realtimeChannel?.unsubscribe();

@@ -152,6 +152,71 @@ class _EmergencyAlertDialogState extends State<EmergencyAlertDialog> {
                   ],
                 ),
 
+                if (widget.report.hasSupportingReports ||
+                    widget.report.isOutDistrict ||
+                    widget.report.photoUnsafe ||
+                    widget.report.isFlaggedSuspicious) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (widget.report.hasSupportingReports)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Text(
+                            '+${widget.report.supportingReportsCount} Supporting Reports',
+                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
+                          ),
+                        ),
+                      if (widget.report.isOutDistrict)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFED7AA)),
+                          ),
+                          child: const Text(
+                            'Outside Lingayen',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
+                          ),
+                        ),
+                      if (widget.report.photoUnsafe)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: const Text(
+                            'Photo Unsafe (Bypassed)',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                          ),
+                        ),
+                      if (widget.report.isFlaggedSuspicious)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: const Text(
+                            'Flagged: High Frequency',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+
                 const SizedBox(height: 14),
 
                 // Details Card
