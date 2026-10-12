@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_role.dart';
 import 'services/auth_service.dart';
+import 'widgets/auth/first_login_password_dialog.dart';
 import 'widgets/programs_activities_sheet.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -44,6 +45,16 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
+
+      if (!mounted) return;
+
+      if (AuthService().mustChangePassword) {
+        final passwordUpdated = await FirstLoginPasswordDialog.show(context);
+        if (!passwordUpdated || !mounted) {
+          // Officer canceled or signed out without changing temporary password
+          return;
+        }
+      }
 
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(

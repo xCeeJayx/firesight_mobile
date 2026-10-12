@@ -50,6 +50,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
     
     bool isActive = user['is_active'] ?? true;
+    bool mustChangePassword = user['must_change_password'] == true;
     bool isSubmitting = false;
 
     showModalBottomSheet(
@@ -216,6 +217,60 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.lock_reset_rounded,
+                                  color: mustChangePassword ? const Color(0xFFEA580C) : const Color(0xFF64748B),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Require Password Reset',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    Text(
+                                      mustChangePassword
+                                          ? 'Officer must set new password on login'
+                                          : 'Standard login access',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: mustChangePassword ? const Color(0xFFEA580C) : const Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: mustChangePassword,
+                              activeThumbColor: const Color(0xFFEA580C),
+                              onChanged: (val) {
+                                setModalState(() => mustChangePassword = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
@@ -233,6 +288,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                     badgeNumber: badgeController.text.trim(),
                                     role: selectedRole,
                                     isActive: isActive,
+                                    mustChangePassword: mustChangePassword,
                                   );
 
                                   if (mounted) {
@@ -955,6 +1011,32 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (user['must_change_password'] == true) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFFEDD5)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.lock_reset_rounded, size: 12, color: Color(0xFFEA580C)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Must Change Pass',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFEA580C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -968,6 +1050,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   _showEditUserModal(user);
                 } else if (val == 'toggle') {
                   _confirmToggleStatus(user);
+                } else if (val == 'force_password_reset') {
+                  _togglePasswordResetRequirement(user);
                 }
               },
               itemBuilder: (context) => [
@@ -978,6 +1062,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       Icon(Icons.edit_outlined, size: 18, color: Color(0xFF0F172A)),
                       SizedBox(width: 10),
                       Text('Edit Profile'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'force_password_reset',
+                  child: Row(
+                    children: [
+                      Icon(
+                        user['must_change_password'] == true ? Icons.lock_open_rounded : Icons.lock_reset_rounded,
+                        size: 18,
+                        color: const Color(0xFFEA580C),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        user['must_change_password'] == true ? 'Waive Password Change' : 'Require Password Change',
+                      ),
                     ],
                   ),
                 ),
@@ -1006,5 +1106,51 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _togglePasswordResetRequirement(Map<String, dynamic> user) async {
+    final String userId = user['id']?.toString() ?? '';
+    final String targetName = user['full_name']?.toString() ?? 'Officer';
+    final bool currentVal = user['must_change_password'] == true;
+    final bool newVal = !currentVal;
+
+    final res = await AuthService().toggleMustChangePassword(
+      userId: userId,
+      mustChange: newVal,
+      targetName: targetName,
+    );
+
+    if (!mounted) return;
+
+    if (res['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(newVal ? Icons.lock_reset_rounded : Icons.lock_open_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  newVal
+                      ? 'Required $targetName to set new password on next login'
+                      : 'Waived password reset requirement for $targetName',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: newVal ? const Color(0xFFEA580C) : const Color(0xFF16A34A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _refreshUsers();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['error'] ?? 'Failed to update password requirement'),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }

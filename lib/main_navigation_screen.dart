@@ -19,6 +19,7 @@ import 'screens/fire_inspector/inspection_hub_screen.dart';
 import 'screens/fire_inspector/establishment_directory_screen.dart';
 import 'screens/fire_inspector/inspector_reports_screen.dart';
 import 'screens/public/public_announcements_screen.dart';
+import 'widgets/auth/first_login_password_dialog.dart';
 import 'widgets/notifications_sheet.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -59,8 +60,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       PushNotificationService().checkPendingNavigation();
+      if (_effectiveRole != UserRole.publicGuest && AuthService().mustChangePassword) {
+        if (!mounted) return;
+        final updated = await FirstLoginPasswordDialog.show(context);
+        if (!updated && mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(RouteGuard.routeLogin, (route) => false);
+        }
+      }
     });
   }
 

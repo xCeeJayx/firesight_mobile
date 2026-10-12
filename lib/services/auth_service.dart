@@ -21,6 +21,9 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  static const String supabaseUrl = 'https://lapfwiawufudxervauzc.supabase.co';
+  static const String supabaseAnonKey = 'sb_publishable_6M90oMjDOdT5oXqzKpbZug_JJOO4U2k';
+
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   UserRole _currentRole = UserRole.publicGuest;
@@ -30,6 +33,34 @@ class AuthService extends ChangeNotifier {
   UserRole get currentRole => _currentRole;
   Map<String, dynamic>? get userProfile => _userProfile;
   bool get isAuthenticated => _currentRole != UserRole.publicGuest;
+
+  /// Checks if current authenticated account must change temporary password on first login
+  bool get mustChangePassword {
+    if (_currentRole == UserRole.publicGuest) return false;
+
+    // Station Officer main administrator account is exempt unless explicitly flagged
+    final email = _client?.auth.currentUser?.email?.toLowerCase() ?? '';
+    if (email == 'admin@bfp.gov.ph') {
+      return _userProfile?['must_change_password'] == true;
+    }
+
+    if (_userProfile != null) {
+      final val = _userProfile!['must_change_password'];
+      if (val == true) return true;
+      if (val == false) return false;
+      // If null/absent on an officer account, default to requiring password change
+      return true;
+    }
+
+    final meta = _client?.auth.currentUser?.userMetadata;
+    if (meta != null) {
+      if (meta['must_change_password'] == true) return true;
+      if (meta['must_change_password'] == false) return false;
+    }
+
+    // Default to true for any newly created officer account
+    return true;
+  }
 
   void setEffectiveRoleForSession(UserRole role) {
     if (role != UserRole.publicGuest) {
@@ -167,12 +198,12 @@ class AuthService extends ChangeNotifier {
           .eq('id', user.id)
           .maybeSingle();
 
-      // 2. If not found by ID, query profile by role from Supabase profiles table
-      if (profileData == null) {
+      // 2. If not found by ID, query profile by email
+      if (profileData == null && email.isNotEmpty) {
         profileData = await client
             .from('profiles')
             .select()
-            .eq('role', inferredRole.toDbString())
+            .eq('email', email)
             .maybeSingle();
       }
 
@@ -180,11 +211,15 @@ class AuthService extends ChangeNotifier {
         _userProfile = Map<String, dynamic>.from(profileData);
         _currentRole = UserRoleExtension.fromString(profileData['role']?.toString());
 
-        // Update profile ID in Supabase to match active auth user ID
-        if (profileData['id'] != user.id) {
+        // Update profile ID and email in Supabase to match active auth user ID
+        if (profileData['id'] != user.id || profileData['email'] != user.email) {
           try {
-            await client.from('profiles').update({'id': user.id}).eq('role', inferredRole.toDbString());
+            await client.from('profiles').update({
+              'id': user.id,
+              'email': user.email,
+            }).eq('id', profileData['id']);
             _userProfile!['id'] = user.id;
+            _userProfile!['email'] = user.email;
           } catch (e) {
             debugPrint('Note linking profile ID: $e');
           }
@@ -197,18 +232,22 @@ class AuthService extends ChangeNotifier {
         _currentRole = inferredRole;
         _userProfile = {
           'id': user.id,
+          'email': user.email,
           'role': inferredRole.toDbString(),
           'full_name': metaName.isNotEmpty ? metaName : inferredRole.displayName,
           'badge_number': metaBadge.isNotEmpty ? metaBadge : 'BFP-PENDING',
+          'must_change_password': true,
         };
 
         // Provision profile record in Supabase profiles table
         try {
           await client.from('profiles').upsert({
             'id': user.id,
+            'email': user.email,
             'role': inferredRole.toDbString(),
             'full_name': _userProfile!['full_name'],
             'badge_number': _userProfile!['badge_number'],
+            'must_change_password': true,
           });
         } catch (upsertError) {
           debugPrint('Profile auto-creation note: $upsertError');
@@ -317,6 +356,65 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Completes mandatory first-login password change for the current authenticated officer.
+  /// Updates password in Supabase Auth, updates must_change_password to false in
+  /// user metadata & database profiles table, writes an audit record, and updates cached session.
+  Future<Map<String, dynamic>> completeFirstLoginPasswordChange({
+    required String newPassword,
+  }) async {
+    final client = _client;
+    if (client == null) {
+      return {'success': false, 'error': 'Database client not connected.'};
+    }
+    final user = client.auth.currentUser;
+    if (user == null) {
+      return {'success': false, 'error': 'No active session found.'};
+    }
+
+    try {
+      // 1. Update password and user_metadata via Supabase Auth
+      final response = await client.auth.updateUser(
+        UserAttributes(
+          password: newPassword,
+          data: {'must_change_password': false},
+        ),
+      );
+
+      if (response.user == null) {
+        return {'success': false, 'error': 'Failed to update user credentials.'};
+      }
+
+      // 2. Update profiles table in Supabase
+      try {
+        await client.from('profiles').update({
+          'must_change_password': false,
+        }).eq('id', user.id);
+      } catch (dbErr) {
+        debugPrint('Warning: Could not update profiles table must_change_password: $dbErr');
+      }
+
+      // 3. Update in-memory user profile & cached storage
+      if (_userProfile != null) {
+        _userProfile!['must_change_password'] = false;
+        await _saveCachedSession(_currentRole, _userProfile!);
+      }
+
+      // 4. Audit trail
+      final name = _userProfile?['full_name'] ?? user.email ?? 'Officer';
+      await logAuditAction(
+        actionType: 'FIRST_LOGIN_PASSWORD_SET',
+        targetEntity: 'User: $name (${user.id})',
+        details: 'Officer completed mandatory first login password reset and secured account credentials.',
+      );
+
+      notifyListeners();
+      return {'success': true};
+    } catch (e) {
+      debugPrint('Error updating password on first login: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   /// Station Officer Admin function: Create internal staff account (fire_inspector or community_risk_officer)
   Future<Map<String, dynamic>> createStaffAccount({
     required String email,
@@ -338,25 +436,35 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final response = await client.auth.signUp(
+      // Use an isolated SupabaseClient instance without session persistence
+      // so the Station Officer's active login session is preserved on the admin device.
+      final isolatedClient = SupabaseClient(
+        supabaseUrl,
+        supabaseAnonKey,
+        authOptions: const AuthClientOptions(authFlowType: AuthFlowType.implicit),
+      );
+
+      final response = await isolatedClient.auth.signUp(
         email: email,
         password: password,
         data: {
           'full_name': fullName,
           'badge_number': badgeNumber,
           'role': role.toDbString(),
+          'must_change_password': true,
         },
       );
 
       final newUser = response.user;
       if (newUser != null) {
-        // Upsert into profiles table
+        // Upsert into profiles table with must_change_password: true
         await client.from('profiles').upsert({
           'id': newUser.id,
           'role': role.toDbString(),
           'full_name': fullName,
           'badge_number': badgeNumber,
           'is_active': true,
+          'must_change_password': true,
           'created_at': DateTime.now().toIso8601String(),
         });
 
@@ -364,7 +472,7 @@ class AuthService extends ChangeNotifier {
         await logAuditAction(
           actionType: 'USER_PROVISIONED',
           targetEntity: 'User: $fullName ($badgeNumber)',
-          details: 'Provisioned new ${role.displayName} account with email $email',
+          details: 'Provisioned new ${role.displayName} account ($email) with temporary password. First login password reset flag set to TRUE.',
         );
 
         return {'success': true, 'userId': newUser.id};
@@ -383,6 +491,7 @@ class AuthService extends ChangeNotifier {
     String? badgeNumber,
     UserRole? role,
     bool? isActive,
+    bool? mustChangePassword,
   }) async {
     final client = _client;
     if (client == null) {
@@ -393,13 +502,12 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final updates = <String, dynamic>{
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+      final updates = <String, dynamic>{};
       if (fullName != null) updates['full_name'] = fullName;
       if (badgeNumber != null) updates['badge_number'] = badgeNumber;
       if (role != null) updates['role'] = role.toDbString();
       if (isActive != null) updates['is_active'] = isActive;
+      if (mustChangePassword != null) updates['must_change_password'] = mustChangePassword;
 
       await client.from('profiles').update(updates).eq('id', userId);
 
@@ -433,7 +541,6 @@ class AuthService extends ChangeNotifier {
     try {
       await client.from('profiles').update({
         'is_active': isActive,
-        'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
 
       await logAuditAction(
@@ -445,6 +552,40 @@ class AuthService extends ChangeNotifier {
       return {'success': true};
     } catch (e) {
       debugPrint('Error toggling user status: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Station Officer Admin function: Toggle require password change on next login
+  Future<Map<String, dynamic>> toggleMustChangePassword({
+    required String userId,
+    required bool mustChange,
+    required String targetName,
+  }) async {
+    final client = _client;
+    if (client == null) {
+      return {'success': false, 'error': 'Database client not connected.'};
+    }
+    if (_currentRole != UserRole.stationOfficer) {
+      return {'success': false, 'error': 'Unauthorized: Only Station Officers can modify password requirements.'};
+    }
+
+    try {
+      await client.from('profiles').update({
+        'must_change_password': mustChange,
+      }).eq('id', userId);
+
+      await logAuditAction(
+        actionType: 'PASSWORD_RESET_FLAG_UPDATED',
+        targetEntity: 'User: $targetName',
+        details: mustChange
+            ? 'Station Officer required password reset on next login'
+            : 'Station Officer waived password reset on next login',
+      );
+
+      return {'success': true};
+    } catch (e) {
+      debugPrint('Error toggling must_change_password: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
