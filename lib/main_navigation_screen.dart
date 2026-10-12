@@ -14,10 +14,11 @@ import 'screens/risk_officer/risk_officer_dashboard_screen.dart';
 import 'screens/risk_officer/olp_hub_screen.dart';
 import 'screens/risk_officer/barangay_risk_map_screen.dart';
 import 'screens/risk_officer/risk_reports_screen.dart';
-import 'screens/fire_inspector/fire_inspector_dashboard_screen.dart';
-import 'screens/fire_inspector/inspection_hub_screen.dart';
-import 'screens/fire_inspector/establishment_directory_screen.dart';
-import 'screens/fire_inspector/inspector_reports_screen.dart';
+import 'screens/fire_inspector/start_monitoring_screen.dart';
+import 'screens/fire_inspector/active_monitoring_screen.dart';
+import 'screens/fire_inspector/monitoring_history_screen.dart';
+import 'screens/fire_inspector/inspection_monitoring_map_screen.dart';
+import 'services/inspection_monitoring_service.dart';
 import 'screens/public/public_announcements_screen.dart';
 import 'widgets/auth/first_login_password_dialog.dart';
 import 'widgets/notifications_sheet.dart';
@@ -56,6 +57,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       PushNotificationService().syncTokenToSupabase();
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: true);
       EmergencyService().resubscribeRealtime();
+      if (_effectiveRole == UserRole.fireInspector) {
+        InspectionMonitoringService().initialize();
+      }
     } else {
       PushNotificationService().updateOfficerTopicSubscription(isOfficer: false);
     }
@@ -78,43 +82,43 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _inspectorName = 'Fire Inspector';
         _stationBadge = 'BFP-9531';
         _screens = [
-          FireInspectorDashboardScreen(
+          StartMonitoringScreen(
             onNavigateTab: (index) {
               setState(() {
                 _currentIndex = index;
               });
             },
           ),
-          const InteractiveRiskMapWidget(isPublicUser: false),
-          const InspectionHubScreen(),
-          const EstablishmentDirectoryScreen(),
-          const InspectorReportsScreen(),
+          ActiveMonitoringScreen(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+          const MonitoringHistoryScreen(),
+          const InspectionMonitoringMapScreen(),
         ];
         _navigationDestinations = const [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
+            icon: Icon(Icons.play_circle_outline_rounded),
+            selectedIcon: Icon(Icons.play_circle_filled_rounded),
+            label: 'Start Monitor',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.timer_outlined),
+            selectedIcon: Icon(Icons.timer_rounded),
+            label: 'Active Session',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_rounded),
+            selectedIcon: Icon(Icons.history_rounded),
+            label: 'History',
           ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map_rounded),
-            label: 'Risk Map',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check_rounded),
-            label: 'Inspection',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront_rounded),
-            label: 'Establishment',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.assignment_turned_in_outlined),
-            selectedIcon: Icon(Icons.assignment_turned_in_rounded),
-            label: 'Reports',
+            label: 'Live Map',
           ),
         ];
         break;
