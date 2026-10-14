@@ -90,13 +90,21 @@ class EmergencyService {
           currentList.insert(0, newReport);
           reportsNotifier.value = currentList;
 
-          // Trigger high-priority pop-up overlay alert
-          // (Staff receives all alerts; Public guest receives only if verified)
-          _triggerEmergencyAlert(
-            newReport,
-            isNew: true,
-            customTitle: newReport.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report',
-          );
+          final s = newReport.status.toLowerCase();
+          // Sequence Rule 1: When a citizen/guest reports an emergency,
+          // officers (Fire Inspector, CRO, Station Officer) get the alert, but NOT the public
+          if (s == 'unverified') {
+            final isStaff = AuthService().isAuthenticated ||
+                (_client.auth.currentUser != null) ||
+                (AuthService().currentRole != UserRole.publicGuest);
+            if (isStaff) {
+              _triggerEmergencyAlert(
+                newReport,
+                isNew: true,
+                customTitle: 'Incoming Emergency Report',
+              );
+            }
+          }
         }
       } else if (payload.eventType == PostgresChangeEvent.update) {
         final newRecord = payload.newRecord;
@@ -113,25 +121,23 @@ class EmergencyService {
           }
           reportsNotifier.value = currentList;
 
-          final wasVerified = oldReport?.isVerified ?? false;
-          final isNowVerified = updatedReport.isVerified;
+          final oldStatus = (oldReport?.status ?? '').toLowerCase();
+          final newStatus = updatedReport.status.toLowerCase();
 
-          // Trigger alert on significant status verification / dispatch
-          if (!wasVerified && isNowVerified) {
-            _triggerEmergencyAlert(
-              updatedReport,
-              isNew: false,
-              customTitle: 'Emergency Verified by BFP',
-            );
-          } else if (oldReport != null &&
-              oldReport.status.toLowerCase() != updatedReport.status.toLowerCase() &&
-              isNowVerified) {
-            _triggerEmergencyAlert(
-              updatedReport,
-              isNew: false,
-              customTitle: 'Emergency Status: ${updatedReport.status}',
-            );
+          // Sequence Rule 2: When an officer reviews and clicks "Verify Incident",
+          // ONLY the public gets the alert (officers already reviewed it, so no alert for officers)
+          if ((oldStatus == 'unverified' || oldReport == null) && newStatus == 'verified') {
+            final isPublic = AuthService().currentRole == UserRole.publicGuest;
+            if (isPublic) {
+              _triggerEmergencyAlert(
+                updatedReport,
+                isNew: false,
+                customTitle: 'Verified Emergency Alert',
+              );
+            }
           }
+          // Sequence Rule 3: When an officer clicks dispatch ('responding'/'dispatched'),
+          // false alarm ('false alarm'), or resolved ('resolved') -> NO ALERTS!
         }
       } else if (payload.eventType == PostgresChangeEvent.delete) {
         final oldRecord = payload.oldRecord;
@@ -152,13 +158,27 @@ class EmergencyService {
     bool isNew = true,
     String? customTitle,
   }) {
+    final s = report.status.toLowerCase();
+
+    // Sequence Rule 3: dispatch, false alarm, and resolved -> strictly NO alerts
+    if (s == 'responding' || s == 'dispatched' || s == 'false alarm' || s == 'false_alarm' || s == 'resolved') {
+      debugPrint('Skipping emergency alert for status: ${report.status}');
+      return;
+    }
+
     final isStaff = AuthService().isAuthenticated ||
         (_client.auth.currentUser != null) ||
         (AuthService().currentRole != UserRole.publicGuest);
 
-    // Public Guest users should ONLY receive verified emergency alerts
-    if (!isStaff && !report.isVerified) {
+    // Sequence Rule 1: Unverified reports should ONLY alert staff (officers), never public guests
+    if (s == 'unverified' && !isStaff) {
       debugPrint('Skipping emergency popup for public user: report ${report.id} is unverified (status: ${report.status})');
+      return;
+    }
+
+    // Sequence Rule 2: Verified reports should ONLY alert public guests (officers already reviewed & verified it)
+    if (s == 'verified' && isStaff) {
+      debugPrint('Skipping verified emergency alert for officer: already reviewed by officers');
       return;
     }
 

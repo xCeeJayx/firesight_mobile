@@ -305,7 +305,8 @@ serve(async (req) => {
         !photoUrl.includes("app_assets") &&
         !photoUrl.includes("firesight_logo"));
 
-      // 1. UNVERIFIED EMERGENCY: Send ONLY to Officers
+      // 1. UNVERIFIED EMERGENCY: Send ONLY to Officers (Fire Inspector, CRO, Station Officer)
+      // Public does NOT receive alert because it is still unverified.
       if (isUnverified) {
         const officerTitle = `🚨 INCOMING EMERGENCY: ${incidentType.toUpperCase()}`;
         const officerBody = `New incident reported in ${barangay}. Tap to review and dispatch responders.`;
@@ -336,9 +337,10 @@ serve(async (req) => {
         results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, officerPayload);
       }
 
-      // 2. VERIFIED / RESPONDING EMERGENCY: Broadcast to Public AND notify Officers
-      if (isVerified) {
-        // A. Public Broadcast (to emergency_public with melodic chime sound)
+      // 2. VERIFIED EMERGENCY: Send ONLY to Public Broadcast
+      // After officers review and click "Verify Incident", the public gets the alert.
+      // Officers do not get an intrusive alert because they already reviewed and verified it.
+      else if (statusLower === "verified") {
         const publicTitle = `🚨 BFP EMERGENCY ALERT: ${incidentType.toUpperCase()}`;
         const publicBody = `Verified emergency in ${barangay}. BFP units responding. Stay alert & give way.`;
 
@@ -366,92 +368,41 @@ serve(async (req) => {
         };
 
         results.public = await sendFcmMessage(serviceAccount.project_id, accessToken, publicPayload);
-
-        // B. Officers Update Broadcast (to emergency_officers with siren sound)
-        const officerUpdateTitle = `🚒 EMERGENCY UPDATE: ${status.toUpperCase()} (${incidentType.toUpperCase()})`;
-        const officerUpdateBody = `Incident in ${barangay} updated to ${status}.`;
-
-        const officerUpdatePayload = {
-          topic: "emergency_officers",
-          notification: {
-            title: officerUpdateTitle,
-            body: officerUpdateBody,
-            ...(hasRealPhoto ? { image: photoUrl } : {}),
-          },
-          data: {
-            ...baseEmergencyData,
-            is_verified: "true",
-          },
-          android: {
-            priority: "HIGH",
-            notification: {
-              channel_id: "emergency_alarm_channel_v4",
-              icon: "ic_notification",
-              color: "#DC2626",
-              sound: "emergency_siren",
-              click_action: "FLUTTER_NOTIFICATION_CLICK",
-            },
-          },
-        };
-
-        results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, officerUpdatePayload);
       }
 
-      // 3. RESOLVED / FALSE ALARM: Notify Officers
-      if (isResolved) {
-        const resolvedTitle = `✅ Incident ${status}: ${incidentType}`;
-        const resolvedBody = `Report for ${barangay} marked as ${status}.`;
-
-        const resolvedPayload = {
-          topic: "emergency_officers",
-          notification: {
-            title: resolvedTitle,
-            body: resolvedBody,
-            ...(hasRealPhoto ? { image: photoUrl } : {}),
-          },
-          data: {
-            ...baseEmergencyData,
-            is_verified: isVerified ? "true" : "false",
-          },
-          android: {
-            priority: "HIGH",
-            notification: {
-              channel_id: "emergency_alarm_channel_v4",
-              icon: "ic_notification",
-              color: "#DC2626",
-              sound: "emergency_siren",
-              click_action: "FLUTTER_NOTIFICATION_CLICK",
-            },
-          },
-        };
-
-        results.officers = await sendFcmMessage(serviceAccount.project_id, accessToken, resolvedPayload);
+      // 3. RESPONDING / DISPATCHED / FALSE ALARM / RESOLVED:
+      // When an officer clicks dispatch, false alarm, or resolved, there should be NO alerts.
+      else {
+        console.log(`[Emergency Notification] Status "${status}" triggers no push alerts per sequence policy.`);
+        results.info = `No alert dispatched for status "${status}".`;
       }
 
-      // Save in-app notification in public.notifications for active station officers & inspectors
+      // Save in-app notification in public.notifications only for new reports or verifications
       try {
-        const { data: officers } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .in("role", ["station_officer", "risk_officer", "inspector", "admin"]);
+        if (isUnverified || statusLower === "verified") {
+          const { data: officers } = await supabaseAdmin
+            .from("profiles")
+            .select("id")
+            .in("role", ["station_officer", "risk_officer", "inspector", "admin"]);
 
-        if (officers && officers.length > 0) {
-          const notifRows = officers.map((off: any) => ({
-            user_id: off.id,
-            title: isVerified
-              ? `🚨 Verified Emergency: ${incidentType}`
-              : `🚨 Incoming Emergency Report: ${incidentType}`,
-            body: `${incidentType} reported in ${barangay} (Status: ${status}).`,
-            type: "emergency_report",
-            data: {
-              report_id: reportId,
-              incident_type: incidentType,
-              barangay: barangay,
-              status: status,
-            },
-          }));
+          if (officers && officers.length > 0) {
+            const notifRows = officers.map((off: any) => ({
+              user_id: off.id,
+              title: statusLower === "verified"
+                ? `🚨 Verified Emergency: ${incidentType}`
+                : `🚨 Incoming Emergency Report: ${incidentType}`,
+              body: `${incidentType} reported in ${barangay} (Status: ${status}).`,
+              type: "emergency_report",
+              data: {
+                report_id: reportId,
+                incident_type: incidentType,
+                barangay: barangay,
+                status: status,
+              },
+            }));
 
-          await supabaseAdmin.from("notifications").insert(notifRows);
+            await supabaseAdmin.from("notifications").insert(notifRows);
+          }
         }
       } catch (dbErr: any) {
         console.warn("Notice: Storing emergency in-app notifications:", dbErr?.message);

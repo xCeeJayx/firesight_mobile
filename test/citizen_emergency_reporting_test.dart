@@ -113,4 +113,44 @@ void main() {
       expect(phMobileRegex.hasMatch('abcdefghijk'), isFalse);
     });
   });
+
+  group('Emergency Alert Sequence Policy Tests', () {
+    bool shouldTriggerAlert({
+      required String status,
+      required bool isStaff,
+    }) {
+      final s = status.toLowerCase();
+      // Rule 3: dispatch, false alarm, and resolved -> strictly NO alerts
+      if (s == 'responding' || s == 'dispatched' || s == 'false alarm' || s == 'false_alarm' || s == 'resolved') {
+        return false;
+      }
+      // Rule 1: unverified -> ONLY officers get alert, not public
+      if (s == 'unverified' && !isStaff) {
+        return false;
+      }
+      // Rule 2: verified -> ONLY public gets alert, not officers
+      if (s == 'verified' && isStaff) {
+        return false;
+      }
+      return true;
+    }
+
+    test('Unverified report triggers alert for officers but NOT for public', () {
+      expect(shouldTriggerAlert(status: 'Unverified', isStaff: true), isTrue);
+      expect(shouldTriggerAlert(status: 'Unverified', isStaff: false), isFalse);
+    });
+
+    test('Verified report triggers alert for public but NOT for officers', () {
+      expect(shouldTriggerAlert(status: 'Verified', isStaff: false), isTrue);
+      expect(shouldTriggerAlert(status: 'Verified', isStaff: true), isFalse);
+    });
+
+    test('Dispatch, False Alarm, and Resolved statuses trigger NO alerts for anyone', () {
+      for (final status in ['Responding', 'Dispatched', 'False Alarm', 'Resolved']) {
+        expect(shouldTriggerAlert(status: status, isStaff: true), isFalse, reason: 'Officer alert for $status should be false');
+        expect(shouldTriggerAlert(status: status, isStaff: false), isFalse, reason: 'Public alert for $status should be false');
+      }
+    });
+  });
 }
+

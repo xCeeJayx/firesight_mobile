@@ -701,6 +701,28 @@ class PushNotificationService {
       createdAt: DateTime.now(),
     );
 
+    final s = report.status.toLowerCase();
+    final isStaff = AuthService().isAuthenticated ||
+        (AuthService().currentRole != UserRole.publicGuest);
+
+    // Sequence Rule 3: dispatch, false alarm, and resolved -> strictly NO alerts
+    if (s == 'responding' || s == 'dispatched' || s == 'false alarm' || s == 'false_alarm' || s == 'resolved') {
+      debugPrint('PushNotificationService: Suppressing emergency alert for status: ${report.status}');
+      return;
+    }
+
+    // Sequence Rule 1: unverified emergency -> ONLY for officers (not public)
+    if (s == 'unverified' && !isStaff) {
+      debugPrint('PushNotificationService: Suppressing unverified report for public user');
+      return;
+    }
+
+    // Sequence Rule 2: verified emergency -> ONLY for public (officers already reviewed & verified it)
+    if (s == 'verified' && isStaff) {
+      debugPrint('PushNotificationService: Suppressing verified report for officer');
+      return;
+    }
+
     if (report.id.isNotEmpty) {
       if (EmergencyService().isRecentlyAlerted(report.id)) {
         debugPrint('Emergency report ${report.id} already alerted in-app.');
@@ -710,7 +732,7 @@ class PushNotificationService {
     }
 
     final finalReport = report;
-    final title = finalReport.isVerified ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
+    final title = (s == 'verified') ? 'Verified Emergency Incident' : 'Incoming Emergency Report';
 
     _executeWithNavigator((context, nav) {
       if (isForeground) {
