@@ -14,6 +14,7 @@ import 'screens/risk_officer/risk_officer_dashboard_screen.dart';
 import 'screens/risk_officer/olp_hub_screen.dart';
 import 'screens/risk_officer/barangay_risk_map_screen.dart';
 import 'screens/risk_officer/risk_reports_screen.dart';
+import 'screens/fire_inspector/fire_inspector_dashboard_screen.dart';
 import 'screens/fire_inspector/start_monitoring_screen.dart';
 import 'screens/fire_inspector/active_monitoring_screen.dart';
 import 'screens/fire_inspector/monitoring_history_screen.dart';
@@ -82,6 +83,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _inspectorName = 'Fire Inspector';
         _stationBadge = 'BFP-9531';
         _screens = [
+          FireInspectorDashboardScreen(
+            onNavigateTab: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
           StartMonitoringScreen(
             onNavigateTab: (index) {
               setState(() {
@@ -101,6 +109,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ];
         _navigationDestinations = const [
           NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.play_circle_outline_rounded),
             selectedIcon: Icon(Icons.play_circle_filled_rounded),
             label: 'Start Monitor',
@@ -118,7 +131,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map_rounded),
-            label: 'Live Map',
+            label: 'Map',
           ),
         ];
         break;

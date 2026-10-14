@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -5,8 +6,10 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/emergency_report_model.dart';
+import 'models/inspection_monitoring_model.dart';
 import 'services/emergency_service.dart';
 import 'services/gis_data_service.dart';
+import 'services/inspection_monitoring_service.dart';
 import 'services/supabase_service.dart';
 import 'widgets/community_urban_checklist_widget.dart';
 import 'widgets/emergency/emergency_details_bottom_sheet.dart';
@@ -144,6 +147,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
   bool _showEmergencyMarkers = true;
   bool _showHydrantMarkers = false;
   bool _showEvacuationMarkers = false;
+  bool _showInspectorMarkers = true;
 
   // Emergency Filter
   String _selectedStatusFilter = 'All';
@@ -157,12 +161,29 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
   // GPS User Location
   LatLng? _currentUserLocation;
 
+  // Periodic timer for live on-site inspectors update
+  Timer? _inspectorPollingTimer;
+
   @override
   void initState() {
     super.initState();
     _loadGisData();
     // Pre-fetch latest reports from EmergencyService
     EmergencyService().fetchReports();
+    if (!widget.isPublicUser) {
+      InspectionMonitoringService().fetchOnSiteInspectors();
+      _inspectorPollingTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+        if (mounted && _showInspectorMarkers) {
+          InspectionMonitoringService().fetchOnSiteInspectors();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _inspectorPollingTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadGisData() async {
@@ -341,13 +362,19 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
     // 1. Filter reports with valid coordinates
     var filtered = reports.where((r) => r.latitude != null && r.longitude != null).toList();
 
-    // 2. Role-based visibility controls:
+    // 2. Exclude resolved and false alarm emergencies
+    filtered = filtered.where((r) {
+      final s = r.status.toLowerCase();
+      return !s.contains('resolve') && !s.contains('false alarm') && !s.contains('false_alarm');
+    }).toList();
+
+    // 3. Role-based visibility controls:
     // If public user, show ONLY verified emergencies (Verified, Responding, Dispatched)
     if (widget.isPublicUser) {
       filtered = filtered.where((r) => r.isVerified).toList();
     }
 
-    // 3. Status filter selection
+    // 4. Status filter selection
     if (_selectedStatusFilter != 'All') {
       filtered = filtered.where((r) {
         return r.status.toLowerCase() == _selectedStatusFilter.toLowerCase();
@@ -370,6 +397,150 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
         ),
       );
     }).toList();
+  }
+
+  List<Marker> _buildInspectorMarkers(List<InspectionMonitoringModel> onSiteInspectors) {
+    return onSiteInspectors.map((inspector) {
+      final lat = inspector.currentLatitude ?? inspector.startLatitude ?? 16.0120;
+      final lng = inspector.currentLongitude ?? inspector.startLongitude ?? 120.2250;
+
+      return Marker(
+        point: LatLng(lat, lng),
+        width: 50,
+        height: 50,
+        child: GestureDetector(
+          onTap: () => _showInspectorDetailsSheet(inspector),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Outer pulsing halo
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: inspector.visitTypeColor.withValues(alpha: 0.25),
+                ),
+              ),
+              // Inner badge
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: inspector.visitTypeColor,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.person_pin_circle_rounded, color: Colors.white, size: 20),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  void _showInspectorDetailsSheet(InspectionMonitoringModel item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: item.visitTypeColor.withValues(alpha: 0.15),
+                  child: Icon(item.visitTypeIcon, color: item.visitTypeColor),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.inspectorRank} ${item.inspectorName}',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        'Badge: ${item.inspectorBadge ?? 'BFP Officer'}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.fiber_manual_record, color: Color(0xFF16A34A), size: 8),
+                      SizedBox(width: 4),
+                      Text('ON SITE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+
+            _buildDetailRow('Visit Type', item.visitType, Icons.assignment_outlined, valueColor: item.visitTypeColor),
+            _buildDetailRow('IO Reference No.', item.ioReferenceNo, Icons.fact_check_outlined),
+            if (item.relatedOrderNo != null)
+              _buildDetailRow('Related Order / Notice', item.relatedOrderNo!, Icons.warning_amber_rounded, valueColor: const Color(0xFFDC2626)),
+            _buildDetailRow('Barangay Location', 'Brgy. ${item.barangay}', Icons.location_city_outlined),
+            if (item.locationAddress != null && item.locationAddress!.isNotEmpty)
+              _buildDetailRow('Landmark / Address', item.locationAddress!, Icons.pin_drop_outlined),
+            if (item.establishmentName != null && item.establishmentName!.isNotEmpty)
+              _buildDetailRow('Establishment', item.establishmentName!, Icons.storefront_outlined),
+            _buildDetailRow('Start Time', item.formattedStartTime, Icons.access_time_rounded),
+            _buildDetailRow('Elapsed Time', item.elapsedDurationString, Icons.timer_outlined),
+
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 42),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Close Details', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Marker> _buildHydrantMarkers() {
@@ -532,7 +703,6 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
     return _evacuationCenters.map((item) {
       final lat = (item['latitude'] as num?)?.toDouble() ?? 16.0267;
       final lng = (item['longitude'] as num?)?.toDouble() ?? 120.2298;
-      final centerName = item['center_name']?.toString() ?? item['name']?.toString() ?? 'Evacuation Center';
       final barangay = item['barangay']?.toString() ?? '';
       const color = Color(0xFF7C3AED);
 
@@ -1197,48 +1367,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
     );
   }
 
-  void _showGenericDialog({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          subtitle,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD84315))),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1303,6 +1432,17 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                 builder: (context, reports, _) {
                   return MarkerLayer(
                     markers: _buildEmergencyMarkers(reports),
+                  );
+                },
+              ),
+
+            // Layer 5: Live On-Site Fire Inspectors (Officers only)
+            if (!widget.isPublicUser && _showInspectorMarkers)
+              ValueListenableBuilder<List<InspectionMonitoringModel>>(
+                valueListenable: InspectionMonitoringService().onSiteInspectorsNotifier,
+                builder: (context, inspectors, _) {
+                  return MarkerLayer(
+                    markers: _buildInspectorMarkers(inspectors),
                   );
                 },
               ),
@@ -1483,6 +1623,33 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                             ),
                             onSelected: (val) => setState(() => _showEvacuationMarkers = val),
                           ),
+                          if (!widget.isPublicUser) ...[
+                            const SizedBox(width: 6),
+                            ValueListenableBuilder<List<InspectionMonitoringModel>>(
+                              valueListenable: InspectionMonitoringService().onSiteInspectorsNotifier,
+                              builder: (context, inspectors, _) {
+                                final count = inspectors.length;
+                                return FilterChip(
+                                  selected: _showInspectorMarkers,
+                                  showCheckmark: false,
+                                  avatar: Icon(
+                                    Icons.person_pin_circle_rounded,
+                                    size: 15,
+                                    color: _showInspectorMarkers ? Colors.white : const Color(0xFFEA580C),
+                                  ),
+                                  label: Text(
+                                    count > 0 ? 'Inspectors ($count)' : 'Inspectors',
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                                  ),
+                                  selectedColor: const Color(0xFFEA580C),
+                                  labelStyle: TextStyle(
+                                    color: _showInspectorMarkers ? Colors.white : const Color(0xFF0F172A),
+                                  ),
+                                  onSelected: (val) => setState(() => _showInspectorMarkers = val),
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1497,7 +1664,7 @@ class _InteractiveRiskMapWidgetState extends State<InteractiveRiskMapWidget> {
                         child: Row(
                           children: [
                             const Text('Filter: ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
-                            ...['All', 'Unverified', 'Verified', 'Responding', 'Resolved'].map((st) {
+                            ...['All', 'Unverified', 'Verified', 'Responding'].map((st) {
                               final isSel = _selectedStatusFilter == st;
                               return Padding(
                                 padding: const EdgeInsets.only(right: 4),

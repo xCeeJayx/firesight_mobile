@@ -392,7 +392,7 @@ class InspectionMonitoringService {
   /// Periodic live location sync while monitoring status is ON SITE
   void _startLocationSyncTimer() {
     _locationSyncTimer?.cancel();
-    _locationSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) async {
+    _locationSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       final active = activeSessionNotifier.value;
       if (active == null || !active.isOnSite) {
         _stopLocationSyncTimer();

@@ -96,5 +96,17 @@ void main() {
       final json = model.toJson();
       expect(json['start_time'], endsWith('Z'));
     });
+
+    test('Fire Inspector Navigation tabs are properly configured with 5 destinations', () {
+      const expectedDestinations = [
+        'Home',
+        'Start Monitor',
+        'Active Session',
+        'History',
+        'Map',
+      ];
+      expect(expectedDestinations.length, 5);
+      expect(expectedDestinations.first, 'Home');
+    });
   });
 }

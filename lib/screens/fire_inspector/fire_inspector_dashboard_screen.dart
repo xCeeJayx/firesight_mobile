@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/offline_sync_service.dart';
+import '../../models/inspection_monitoring_model.dart';
 import '../../services/emergency_service.dart';
+import '../../services/inspection_monitoring_service.dart';
 import '../../widgets/emergency/emergency_reports_feed.dart';
-import 'commercial_inspection_form_screen.dart';
-import 'view_inspection_form_dialog.dart';
 
 class FireInspectorDashboardScreen extends StatefulWidget {
   final Function(int index)? onNavigateTab;
@@ -19,136 +18,102 @@ class FireInspectorDashboardScreen extends StatefulWidget {
 }
 
 class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScreen> {
-  late Future<Map<String, int>> _kpiMetricsFuture;
-
-  // Design Tokens
-  static const Color colorCanvas = Color(0xFFF8FAFC);
-  static const Color colorSurface = Color(0xFFFFFFFF);
-  static const Color colorTextPrimary = Color(0xFF0F172A);
-  static const Color colorTextSecondary = Color(0xFF475569);
-  static const Color colorAccent = Color(0xFFEA580C);
-  static const Color colorBorder = Color(0xFFE2E8F0);
-  static const Color colorSuccess = Color(0xFF16A34A);
-  static const Color colorWarning = Color(0xFFD97706);
+  int _todayVisitsCount = 0;
+  bool _isLoadingStats = true;
 
   @override
   void initState() {
     super.initState();
     _refreshData();
-    OfflineSyncService().pendingCountNotifier.addListener(_refreshData);
+    InspectionMonitoringService().activeSessionNotifier.addListener(_onActiveSessionChanged);
   }
 
   @override
   void dispose() {
-    OfflineSyncService().pendingCountNotifier.removeListener(_refreshData);
+    InspectionMonitoringService().activeSessionNotifier.removeListener(_onActiveSessionChanged);
     super.dispose();
   }
 
-  void _refreshData() {
+  void _onActiveSessionChanged() {
     if (mounted) {
-      setState(() {
-        _kpiMetricsFuture = _fetchKpiMetrics();
-      });
-      EmergencyService().fetchReports();
+      _fetchTodayStats();
     }
   }
 
-  Future<Map<String, int>> _fetchKpiMetrics() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final userId = user?.id;
+  Future<void> _refreshData() async {
+    EmergencyService().fetchReports();
+    InspectionMonitoringService().fetchActiveSession();
+    InspectionMonitoringService().fetchOnSiteInspectors();
+    await _fetchTodayStats();
+  }
 
-    int scheduledToday = 0;
-    int completed = 0;
-    int pendingDeficiencies = 0;
-
-    // 1. Account for offline pending items
+  Future<void> _fetchTodayStats() async {
     try {
-      final offline = await OfflineSyncService().getPendingItems(targetTable: 'inspections');
-      for (var item in offline) {
-        scheduledToday++;
-      }
-    } catch (_) {}
+      final user = Supabase.instance.client.auth.currentUser;
+      final now = DateTime.now();
+      final startOfDayLocal = DateTime(now.year, now.month, now.day);
+      final startOfDayUtc = startOfDayLocal.toUtc().toIso8601String();
 
-    // 2. Fetch remote metrics from Supabase
-    try {
-      final client = Supabase.instance.client;
-      var query = client.from('inspections').select('overall_status, recommendation, compliance_status, date_inspected');
-      if (userId != null) {
-        query = query.eq('inspector_id', userId);
+      var query = Supabase.instance.client
+          .from('inspection_monitoring_sessions')
+          .select('id, status, start_time');
+      if (user?.id != null) {
+        query = query.eq('inspector_id', user!.id);
       }
+      query = query.gte('start_time', startOfDayUtc);
 
       final res = await query;
-      final todayStr = DateTime.now().toIso8601String().split('T').first;
-
-      for (var item in res) {
-        final st = (item['overall_status'] ?? '').toString().toLowerCase();
-        final rec = (item['recommendation'] ?? item['compliance_status'] ?? '').toString().toUpperCase();
-        final dateInspected = (item['date_inspected'] ?? '').toString();
-
-        if (dateInspected.startsWith(todayStr) || st == 'pending' || st == 'in progress' || st == 'assigned' || st == 'pending sync') {
-          scheduledToday++;
-        }
-        if (st == 'completed' || st == 'passed' || st == 'inspected') {
-          completed++;
-        }
-        if (rec.contains('NTC') || rec.contains('NOTICE') || rec.contains('DEFICIENCY') || rec.contains('VIOLATION')) {
-          pendingDeficiencies++;
-        }
+      if (mounted) {
+        setState(() {
+          _todayVisitsCount = (res as List).length;
+          _isLoadingStats = false;
+        });
       }
-
-      return {
-        'scheduledToday': scheduledToday,
-        'completed': completed,
-        'pendingDeficiencies': pendingDeficiencies,
-      };
-    } catch (_) {
-      return {'scheduledToday': scheduledToday, 'completed': completed, 'pendingDeficiencies': pendingDeficiencies};
+    } catch (e) {
+      debugPrint('Error fetching inspector today stats: $e');
+      if (mounted) {
+        setState(() => _isLoadingStats = false);
+      }
     }
-  } void _launchForm([Map<String, dynamic>? item]) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => CommercialInspectionFormScreen(
-          assignmentId: item?['id']?.toString(),
-          initialBusinessName: item?['business_name']?.toString(),
-          initialAddress: item?['address']?.toString(),
-          initialIoNumber: item?['inspection_order_no']?.toString(),
-        ),
-      ),
-    ).then((_) => _refreshData());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: colorCanvas,
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Fixed Top Header & Overview Cards (Sticky / Non-scrolling)
+          // Sticky Top Operational Section
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Daily Operations Metric Cards',
+                  'Field Monitoring Operations',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: colorTextPrimary,
+                    color: Color(0xFF0F172A),
                   ),
                 ),
-                const SizedBox(height: 10),
-                _buildKpiMetricsRow(),
+                const SizedBox(height: 2),
+                const Text(
+                  'Live session status & real-time emergency feed',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 12),
+                _buildLiveKpiRow(),
               ],
             ),
           ),
 
-          // Scrollable Live Emergency Reports Feed
+          // Scrollable Live Emergency Reports Feed (Identical to CRO Dashboard)
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async => _refreshData(),
-              color: colorAccent,
+              onRefresh: _refreshData,
+              color: const Color(0xFFEA580C),
               child: const EmergencyReportsFeed(
                 isExpanded: true,
                 padding: EdgeInsets.symmetric(horizontal: 16),
@@ -160,39 +125,57 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
     );
   }
 
-  Widget _buildKpiMetricsRow() {
-    return FutureBuilder<Map<String, int>>(
-      future: _kpiMetricsFuture,
-      builder: (context, snapshot) {
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
-        final metrics = snapshot.data ?? {'scheduledToday': 0, 'completed': 0, 'pendingDeficiencies': 0};
+  Widget _buildLiveKpiRow() {
+    return ValueListenableBuilder<InspectionMonitoringModel?>(
+      valueListenable: InspectionMonitoringService().activeSessionNotifier,
+      builder: (context, activeSession, _) {
+        final isOnSite = activeSession != null;
 
-        return Row(
-          children: [
-            _buildKpiCard(
-              title: 'Scheduled Today',
-              value: isLoading ? '...' : '${metrics['scheduledToday'] ?? 0}',
-              subtitle: 'Assigned today',
-              icon: Icons.calendar_today_outlined,
-              color: const Color(0xFF0284C7),
-            ),
-            const SizedBox(width: 10),
-            _buildKpiCard(
-              title: 'Completed',
-              value: isLoading ? '...' : '${metrics['completed'] ?? 0}',
-              subtitle: 'FSIC Conducted',
-              icon: Icons.check_circle_outline,
-              color: const Color(0xFF16A34A),
-            ),
-            const SizedBox(width: 10),
-            _buildKpiCard(
-              title: 'Deficiencies',
-              value: isLoading ? '...' : '${metrics['pendingDeficiencies'] ?? 0}',
-              subtitle: 'Action required',
-              icon: Icons.warning_amber_outlined,
-              color: const Color(0xFFDC2626),
-            ),
-          ],
+        return ValueListenableBuilder<List<InspectionMonitoringModel>>(
+          valueListenable: InspectionMonitoringService().onSiteInspectorsNotifier,
+          builder: (context, onSiteList, _) {
+            return Row(
+              children: [
+                // Card 1: My Monitoring Status
+                _buildKpiCard(
+                  title: 'My Status',
+                  value: isOnSite ? 'ON SITE' : 'STANDBY',
+                  subtitle: isOnSite ? activeSession.visitType : 'Off-site',
+                  icon: isOnSite ? Icons.sensors_rounded : Icons.radio_button_off_rounded,
+                  color: isOnSite ? const Color(0xFF16A34A) : const Color(0xFF475569),
+                  onTap: () {
+                    if (isOnSite) {
+                      widget.onNavigateTab?.call(2); // Active Session
+                    } else {
+                      widget.onNavigateTab?.call(1); // Start Monitor
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // Card 2: Today's Visits
+                _buildKpiCard(
+                  title: 'Visits Today',
+                  value: _isLoadingStats ? '...' : '$_todayVisitsCount',
+                  subtitle: 'Logged sessions',
+                  icon: Icons.assignment_turned_in_outlined,
+                  color: const Color(0xFF0284C7),
+                  onTap: () => widget.onNavigateTab?.call(3), // History
+                ),
+                const SizedBox(width: 8),
+
+                // Card 3: Team On-Site (Lingayen)
+                _buildKpiCard(
+                  title: 'Team On-Site',
+                  value: '${onSiteList.length}',
+                  subtitle: 'Inspectors live',
+                  icon: Icons.people_outline_rounded,
+                  color: const Color(0xFFEA580C),
+                  onTap: () => widget.onNavigateTab?.call(4), // Live Map
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -204,58 +187,66 @@ class _FireInspectorDashboardScreenState extends State<FireInspectorDashboardScr
     required String subtitle,
     required IconData icon,
     required Color color,
+    VoidCallback? onTap,
   }) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 9,
-                color: Color(0xFF64748B),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

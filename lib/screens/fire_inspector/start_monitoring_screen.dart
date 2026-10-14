@@ -211,8 +211,8 @@ class _StartMonitoringScreenState extends State<StartMonitoringScreen> {
 
     if (result['success'] == true) {
       _showSnackBar('Field Monitoring Started: Status ON SITE');
-      // Navigate to Active Monitoring Tab
-      widget.onNavigateTab?.call(1);
+      // Navigate to Active Monitoring Tab (index 2)
+      widget.onNavigateTab?.call(2);
     } else {
       _showSnackBar(result['error']?.toString() ?? 'Failed to start field monitoring.');
     }
@@ -316,7 +316,7 @@ class _StartMonitoringScreenState extends State<StartMonitoringScreen> {
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
-                          onPressed: () => widget.onNavigateTab?.call(1),
+                          onPressed: () => widget.onNavigateTab?.call(2), // Active Session tab
                           icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                           label: const Text('GO TO ACTIVE SESSION & END MONITORING', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(

@@ -218,7 +218,7 @@ class _ActiveMonitoringScreenState extends State<ActiveMonitoringScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                widget.onNavigateTab?.call(2); // Go to history
+                widget.onNavigateTab?.call(3); // Go to history (index 3)
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F172A),
@@ -277,7 +277,7 @@ class _ActiveMonitoringScreenState extends State<ActiveMonitoringScreen> {
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
-                      onPressed: () => widget.onNavigateTab?.call(0),
+                      onPressed: () => widget.onNavigateTab?.call(1), // Start Field Monitoring (index 1)
                       icon: const Icon(Icons.play_arrow_rounded),
                       label: const Text('Start Field Monitoring', style: TextStyle(fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
