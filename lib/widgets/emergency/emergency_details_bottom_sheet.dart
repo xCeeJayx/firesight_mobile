@@ -167,35 +167,144 @@ class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomShee
     }
   }
 
-  Future<void> _updateStatus(String newStatus) async {
-    setState(() => _isUpdatingStatus = true);
-    final success = await EmergencyService().updateReportStatus(_report.id, newStatus);
-    if (mounted) {
-      setState(() {
-        _isUpdatingStatus = false;
-        if (success) {
-          _report = _report.copyWith(status: newStatus);
-        }
-      });
+  Future<void> _confirmAndChangeStatus(String newStatus) async {
+    final isResolved = newStatus == 'Resolved';
+    final isFalseAlarm = newStatus == 'False Alarm';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
+    if (isResolved || isFalseAlarm) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
             children: [
-              Icon(
-                success ? Icons.check_circle_outline : Icons.error_outline,
-                color: Colors.white,
-                size: 20,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isResolved
+                      ? const Color(0xFFDCFCE7)
+                      : const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isResolved ? Icons.check_circle_outline : Icons.cancel_outlined,
+                  color: isResolved ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                  size: 24,
+                ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                success
-                    ? 'Status updated to "$newStatus"'
-                    : 'Failed to update report status',
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isResolved ? 'Mark as Resolved?' : 'Mark as False Alarm?',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
               ),
             ],
           ),
-          backgroundColor: success ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+          content: Text(
+            isResolved
+                ? 'This will conclude operational response for this incident and archive it from active maps and feeds.'
+                : 'Are you sure this report is a false or prank alarm? It will be dismissed from active operations and hidden from maps.',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+          ),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isResolved ? const Color(0xFF0F172A) : const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text(
+                isResolved ? 'Confirm & Resolve' : 'Confirm False Alarm',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isUpdatingStatus = true);
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+
+    final success = await EmergencyService().updateReportStatus(_report.id, newStatus);
+
+    if (!mounted) return;
+    setState(() => _isUpdatingStatus = false);
+
+    if (success) {
+      if (isResolved || isFalseAlarm) {
+        nav.pop(); // Close the modal sheet upon resolution or false alarm
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  isResolved ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  isResolved ? 'Incident marked as Resolved.' : 'Report marked as False Alarm.',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            backgroundColor: isResolved ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // If Verified or Responding: update the local report model so UI reflects the next lifecycle state
+      setState(() {
+        _report = _report.copyWith(status: newStatus);
+      });
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                newStatus == 'Verified'
+                    ? 'Incident Verified by BFP. Public alert broadcast.'
+                    : 'Response Dispatched. BFP units responding.',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          backgroundColor: newStatus == 'Verified' ? const Color(0xFF16A34A) : const Color(0xFFEA580C),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Text('Failed to update report status. Please check connection.'),
+            ],
+          ),
+          backgroundColor: Color(0xFFDC2626),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -815,59 +924,7 @@ class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomShee
                         ),
                       )
                     else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (_report.status.toLowerCase() != 'verified')
-                            ElevatedButton.icon(
-                              onPressed: () => _updateStatus('Verified'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF16A34A),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.verified_outlined, size: 16),
-                              label: const Text('Verify Incident', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            ),
-                          if (_report.status.toLowerCase() != 'responding' && _report.status.toLowerCase() != 'dispatched')
-                            ElevatedButton.icon(
-                              onPressed: () => _updateStatus('Responding'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFEA580C),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.local_shipping_outlined, size: 16),
-                              label: const Text('Dispatch Response', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            ),
-                          if (_report.status.toLowerCase() != 'resolved')
-                            ElevatedButton.icon(
-                              onPressed: () => _updateStatus('Resolved'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.check_circle_outline, size: 16),
-                              label: const Text('Mark Resolved', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            ),
-                          if (_report.status.toLowerCase() != 'false alarm')
-                            OutlinedButton.icon(
-                              onPressed: () => _updateStatus('False Alarm'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFDC2626),
-                                side: const BorderSide(color: Color(0xFFFECACA)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.cancel_outlined, size: 16),
-                              label: const Text('False Alarm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            ),
-                        ],
-                      ),
+                      _buildOperationalActions(),
                   ],
                   const SizedBox(height: 20),
                 ],
@@ -876,6 +933,205 @@ class _EmergencyDetailsBottomSheetState extends State<EmergencyDetailsBottomShee
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOperationalActions() {
+    final status = _report.status.toLowerCase();
+
+    // 1. Resolved State -> Read-only Case Closed Banner
+    if (status == 'resolved') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFCBD5E1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Incident Resolved',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'This incident is closed. Operational response is concluded.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. False Alarm State -> Read-only Closed Banner
+    if (status == 'false alarm' || status == 'false_alarm') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.cancel_rounded, color: Color(0xFFDC2626), size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Marked as False Alarm',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Dismissed as invalid or prank report. No action needed.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Out-of-Jurisdiction State
+    if (status == 'out-of-jurisdiction' || _report.isOutOfJurisdiction) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFED7AA)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEDD5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.near_me_outlined, color: Color(0xFFC2410C), size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Out of Jurisdiction',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFC2410C)),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Coordinates are outside Lingayen. Replaced with referral protocol.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF9A3412)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 4. Sequential Active Lifecycle:
+    // - Unverified: [Verify Incident], [False Alarm]
+    // - Verified: [Dispatch Response], [Mark Resolved]
+    // - Responding / Dispatched: [Mark Resolved]
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (status == 'unverified') ...[
+          ElevatedButton.icon(
+            onPressed: () => _confirmAndChangeStatus('Verified'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.verified_outlined, size: 16),
+            label: const Text('Verify Incident', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _confirmAndChangeStatus('False Alarm'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFDC2626),
+              side: const BorderSide(color: Color(0xFFFECACA)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.cancel_outlined, size: 16),
+            label: const Text('False Alarm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ] else if (status == 'verified') ...[
+          ElevatedButton.icon(
+            onPressed: () => _confirmAndChangeStatus('Responding'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.local_shipping_outlined, size: 16),
+            label: const Text('Dispatch Response', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _confirmAndChangeStatus('Resolved'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.check_circle_outline, size: 16),
+            label: const Text('Mark Resolved', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ] else if (status == 'responding' || status == 'dispatched') ...[
+          ElevatedButton.icon(
+            onPressed: () => _confirmAndChangeStatus('Resolved'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.check_circle_outline, size: 16),
+            label: const Text('Mark Resolved', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ],
     );
   }
 
